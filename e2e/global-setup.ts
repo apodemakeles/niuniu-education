@@ -11,8 +11,8 @@ let frontendProc: ChildProcess | null = null;
 
 function ensureBackendBuilt() {
   const bin = resolve(ROOT, 'bin/niuniu-api');
-  if (existsSync(bin)) return;
-  console.log('[e2e] 后端二进制不存在，执行 go build...');
+  // 每次 e2e 前重建后端，确保 API 与源码一致
+  console.log('[e2e] 构建后端...');
   execSync('CGO_ENABLED=0 go build -o ../bin/niuniu-api ./cmd/niuniu', {
     cwd: resolve(ROOT, 'backend'),
     stdio: 'inherit',
@@ -20,10 +20,9 @@ function ensureBackendBuilt() {
 }
 
 function ensureFrontendBuilt(backendPort: number) {
-  // e2e 用独立的 dist（.e2e-dist），API base 指向 e2e 后端端口。
-  // 前端生产构建会把 VITE_API_BASE 固化进产物，故不能复用开发用的 dist。
+  // e2e 每次重建，确保测到最新前端代码
   const e2eDist = resolve(ROOT, 'frontend/.e2e-dist');
-  if (existsSync(e2eDist)) return;
+  rmSync(e2eDist, { recursive: true, force: true });
   console.log('[e2e] 构建 e2e 专用前端（VITE_API_BASE 指向 :', backendPort, ')...');
   // 用环境变量覆盖 VITE_API_BASE，输出到 .e2e-dist 避免污染 dist
   // vite 不支持直接改 outDir via env，改用单独构建目录

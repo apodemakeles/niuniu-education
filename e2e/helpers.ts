@@ -32,4 +32,18 @@ export async function seedBaseline(ctx: APIRequestContext, apiBase: string) {
   }
 }
 
+// 批量插入测试单词，用于分页 e2e。
+export async function seedManyWords(ctx: APIRequestContext, apiBase: string, count: number) {
+  for (let i = 1; i <= count; i++) {
+    await ctx.post(`${apiBase}/words`, {
+      data: {
+        text: `word${i}`,
+        meaningZh: `词${i}`,
+        phonetic: '',
+        wordType: 'new',
+      },
+    });
+  }
+}
+
 export { API_BASE } from './ports';

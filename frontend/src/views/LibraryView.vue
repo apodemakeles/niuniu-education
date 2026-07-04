@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useLibraryStore } from '@/stores/library'
 import { deleteWord } from '@/api/words'
 import { WORD_TYPE_TEXT, WORD_STATUS_TEXT } from '@/types/word'
@@ -22,42 +22,45 @@ const showCreateModal = ref(false)
 const showExportModal = ref(false)
 const editingWord = ref<Word | null>(null)
 
-// 筛选
-const activeType = ref<'all' | 'new' | 'mistake'>('all')
-const statusFilter = ref('all')
-const searchQuery = ref('')
-
-const filteredWords = computed(() => {
-  return store.words.filter((w) => {
-    const matchType = activeType.value === 'all' || w.wordType === activeType.value
-    const matchStatus = statusFilter.value === 'all' || w.status === statusFilter.value
-    const q = searchQuery.value.trim().toLowerCase()
-    const matchQuery =
-      q === '' ||
-      w.text.toLowerCase().includes(q) ||
-      w.meaningZh.toLowerCase().includes(q) ||
-      (w.phonetic || '').toLowerCase().includes(q)
-    return matchType && matchStatus && matchQuery
-  })
-})
-
-const stats = computed(() => {
-  const all = store.words
-  return {
-    total: all.length,
-    newWords: all.filter((w) => w.wordType === 'new').length,
-    mistakeWords: all.filter((w) => w.wordType === 'mistake').length,
-  }
+// 搜索框本地值（防抖后提交到 store；跳过与 store 相同的值，避免挂载时重复请求）
+const searchInput = ref(store.filters.q)
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch(searchInput, (q) => {
+  if (q === store.filters.q) return
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    store.setQuery(q)
+  }, 300)
 })
 
 const categories = computed(() => [
-  { key: 'all' as const, title: '全部单词', desc: '查看新词和易错词', count: stats.value.total },
-  { key: 'new' as const, title: '新词', desc: '计划学习的单词', count: stats.value.newWords },
-  { key: 'mistake' as const, title: '易错词', desc: '需要重点复习的单词', count: stats.value.mistakeWords },
+  { key: 'all' as const, title: '全部单词', desc: '查看新词和易错词', count: store.stats.total },
+  { key: 'new' as const, title: '新词', desc: '计划学习的单词', count: store.stats.newWords },
+  { key: 'mistake' as const, title: '易错词', desc: '需要重点复习的单词', count: store.stats.mistakeWords },
 ])
 
+const totalPages = computed(() =>
+  Math.max(1, Math.ceil(store.pagination.total / store.pagination.pageSize)),
+)
+
+const pageRangeText = computed(() => {
+  const { total, page, pageSize } = store.pagination
+  if (total === 0) return '0 条'
+  const start = (page - 1) * pageSize + 1
+  const end = Math.min(page * pageSize, total)
+  return `${start}–${end} / 共 ${total} 条`
+})
+
 function reload() {
-  store.load()
+  return store.load()
+}
+
+function onTypeChange(type: 'all' | 'new' | 'mistake') {
+  store.setType(type)
+}
+
+function onStatusChange(e: Event) {
+  store.setStatus((e.target as HTMLSelectElement).value)
 }
 
 function onImportConfirmed(result: ImportResult, source: 'photo' | 'paste') {
@@ -83,7 +86,6 @@ function onWordSaved() {
 }
 
 async function onDelete(w: Word) {
-  // 对齐原型 app.js：未学直接删，其余软删
   const isUnlearned = w.status === 'unlearned'
   const confirmMsg = isUnlearned
     ? `确认删除「${w.text}」？未学单词将直接删除。`
@@ -101,9 +103,8 @@ async function onDelete(w: Word) {
   }
 }
 
-// 录入弹窗默认类型随当前分类联动
 const createDefaultType = computed<WordType | undefined>(() =>
-  activeType.value === 'new' ? 'new' : activeType.value === 'mistake' ? 'mistake' : undefined,
+  store.filters.type === 'new' ? 'new' : store.filters.type === 'mistake' ? 'mistake' : undefined,
 )
 
 onMounted(() => store.load())
@@ -122,7 +123,6 @@ onMounted(() => store.load())
     </header>
 
     <div class="library-layout">
-      <!-- 分类栏 -->
       <section class="panel">
         <div class="panel-head"><h2>分类</h2></div>
         <div class="library-list">
@@ -130,9 +130,9 @@ onMounted(() => store.load())
             v-for="cat in categories"
             :key="cat.key"
             class="library-card"
-            :class="{ active: activeType === cat.key }"
+            :class="{ active: store.filters.type === cat.key }"
             type="button"
-            @click="activeType = cat.key"
+            @click="onTypeChange(cat.key)"
           >
             <strong>{{ cat.title }}</strong>
             <span>{{ cat.desc }}</span>
@@ -141,12 +141,11 @@ onMounted(() => store.load())
         </div>
       </section>
 
-      <!-- 详情区 -->
       <section class="panel">
         <div class="stats-grid">
-          <div><span>总词数</span><strong>{{ stats.total }}</strong></div>
-          <div><span>新词</span><strong>{{ stats.newWords }}</strong></div>
-          <div><span>易错词</span><strong>{{ stats.mistakeWords }}</strong></div>
+          <div><span>总词数</span><strong>{{ store.stats.total }}</strong></div>
+          <div><span>新词</span><strong>{{ store.stats.newWords }}</strong></div>
+          <div><span>易错词</span><strong>{{ store.stats.mistakeWords }}</strong></div>
         </div>
 
         <div class="action-strip">
@@ -156,8 +155,16 @@ onMounted(() => store.load())
         </div>
 
         <div class="table-toolbar">
-          <input v-model="searchQuery" type="search" placeholder="搜索单词、中文、音标" />
-          <select v-model="statusFilter" aria-label="状态筛选">
+          <input
+            v-model="searchInput"
+            type="search"
+            placeholder="搜索单词、中文、音标"
+          />
+          <select
+            :value="store.filters.status"
+            aria-label="状态筛选"
+            @change="onStatusChange"
+          >
             <option value="all">全部状态</option>
             <option value="unlearned">未学</option>
             <option value="learning">学习中</option>
@@ -182,7 +189,7 @@ onMounted(() => store.load())
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="w in filteredWords" :key="w.id">
+                <tr v-for="w in store.words" :key="w.id">
                   <td><strong>{{ w.text }}</strong></td>
                   <td>{{ w.meaningZh }}</td>
                   <td>{{ w.phonetic || '未填写' }}</td>
@@ -195,11 +202,34 @@ onMounted(() => store.load())
                     </div>
                   </td>
                 </tr>
-                <tr v-if="filteredWords.length === 0">
+                <tr v-if="store.words.length === 0">
                   <td colspan="6" class="note">没有匹配的单词。</td>
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <div v-if="store.pagination.total > 0" class="pagination-bar">
+            <span class="pagination-info">{{ pageRangeText }}</span>
+            <div class="pagination-actions">
+              <button
+                class="secondary-btn"
+                type="button"
+                :disabled="store.pagination.page <= 1 || store.loading"
+                @click="store.setPage(store.pagination.page - 1)"
+              >
+                上一页
+              </button>
+              <span class="pagination-page">第 {{ store.pagination.page }} / {{ totalPages }} 页</span>
+              <button
+                class="secondary-btn"
+                type="button"
+                :disabled="store.pagination.page >= totalPages || store.loading"
+                @click="store.setPage(store.pagination.page + 1)"
+              >
+                下一页
+              </button>
+            </div>
           </div>
         </template>
       </section>

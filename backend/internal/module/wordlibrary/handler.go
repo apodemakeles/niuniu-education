@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/apodemakeles/niuniu-education/backend/internal/config"
@@ -166,17 +167,34 @@ func (h *Handler) handleDeleteWord(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleListWords(w http.ResponseWriter, r *http.Request) {
-	words, err := h.store.List(r.Context(), ListParams{
-		Type:   r.URL.Query().Get("type"),
-		Status: r.URL.Query().Get("status"),
+	page, pageSize := parsePagination(r)
+	result, err := h.store.List(r.Context(), ListParams{
+		Type:     r.URL.Query().Get("type"),
+		Status:   r.URL.Query().Get("status"),
 		Q:      r.URL.Query().Get("q"),
+		Page:     page,
+		PageSize: pageSize,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", "查询单词失败")
 		h.logger.Error("list words", slog.Any("err", err))
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": words})
+	stats, err := h.store.CountStats(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", "查询统计失败")
+		h.logger.Error("count stats", slog.Any("err", err))
+		return
+	}
+	writeJSON(w, http.StatusOK, WordListResponse{
+		Data: result.Words,
+		Pagination: PaginationMeta{
+			Page:     page,
+			PageSize: pageSize,
+			Total:    result.Total,
+		},
+		Stats: stats,
+	})
 }
 
 // handleImportOCR 接收图片，调 OCR 生成草稿行（不入库）。
@@ -343,6 +361,26 @@ func sniffImageType(filename string) string {
 }
 
 // --- 响应工具（避免与 server 包循环依赖，内联）---
+
+const (
+	defaultPageSize = 20
+	maxPageSize     = 200
+)
+
+func parsePagination(r *http.Request) (page, pageSize int) {
+	page, _ = strconv.Atoi(r.URL.Query().Get("page"))
+	pageSize, _ = strconv.Atoi(r.URL.Query().Get("pageSize"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = defaultPageSize
+	}
+	if pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+	return page, pageSize
+}
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

@@ -35,7 +35,7 @@ func TestConfirmImport_AddsAndSetsDefaultStatus(t *testing.T) {
 	// 验证默认状态落库
 	all, _ := store.List(ctx, ListParams{})
 	byText := map[string]Word{}
-	for _, w := range all {
+	for _, w := range all.Words {
 		byText[w.Text] = w
 	}
 	if byText["apple"].Status != StatusUnlearned {
@@ -83,8 +83,8 @@ func TestConfirmImport_EmptyTextInvalid(t *testing.T) {
 		t.Errorf("got invalid=%d added=%d, want invalid=1 added=1", resp.Invalid, resp.Added)
 	}
 	all, _ := store.List(ctx, ListParams{})
-	if len(all) != 1 {
-		t.Errorf("DB 应只有 1 行，got %d", len(all))
+	if len(all.Words) != 1 {
+		t.Errorf("DB 应只有 1 行，got %d", len(all.Words))
 	}
 }
 
@@ -160,8 +160,8 @@ func TestRecognizeForDraft(t *testing.T) {
 	}
 	// 验证不写库
 	all, _ := store.List(ctx, ListParams{})
-	if len(all) != 0 {
-		t.Errorf("草稿阶段不应写库，got %d 行", len(all))
+	if len(all.Words) != 0 {
+		t.Errorf("草稿阶段不应写库，got %d 行", len(all.Words))
 	}
 	// 低置信度行应被标记 low_confidence
 	hasFlag := false

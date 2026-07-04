@@ -15,36 +15,84 @@ func NewStore(db *sql.DB) *Store { return &Store{db: db} }
 
 // ListParams 列表查询参数。
 type ListParams struct {
-	Type   string // all/new/mistake
-	Status string // all/...
-	Q      string // 在 text/meaning_zh/phonetic 中模糊匹配
+	Type     string // all/new/mistake
+	Status   string // all/...
+	Q        string // 在 text/meaning_zh/phonetic 中前缀匹配
+	Page     int    // 从 1 起；0 表示不分页
+	PageSize int    // <=0 表示不分页（导出等内部调用）
 }
 
-// List 返回未软删的单词列表（按创建时间倒序）。
-func (s *Store) List(ctx context.Context, p ListParams) ([]Word, error) {
-	q := `SELECT id, library_id, text, meaning_zh, phonetic, word_type, status,
-	             created_at, updated_at, last_edited_at, source
-	      FROM words
-	      WHERE deleted_at IS NULL AND library_id = ?`
+// ListResult 是分页列表查询结果。
+type ListResult struct {
+	Words []Word
+	Total int
+}
+
+func (s *Store) buildListWhere(p ListParams) (string, []any) {
+	clause := `deleted_at IS NULL AND library_id = ?`
 	args := []any{MainLibraryID}
 	if p.Type == TypeNew || p.Type == TypeMistake {
-		q += ` AND word_type = ?`
+		clause += ` AND word_type = ?`
 		args = append(args, p.Type)
 	}
 	if p.Status != "" && p.Status != "all" {
-		q += ` AND status = ?`
+		clause += ` AND status = ?`
 		args = append(args, p.Status)
 	}
 	if p.Q != "" {
-		q += ` AND (text LIKE ? OR meaning_zh LIKE ? OR phonetic LIKE ?)`
-		like := "%" + p.Q + "%"
+		clause += ` AND (text LIKE ? OR meaning_zh LIKE ? OR phonetic LIKE ?)`
+		like := p.Q + "%"
 		args = append(args, like, like, like)
 	}
-	q += ` ORDER BY created_at DESC`
+	return clause, args
+}
 
-	rows, err := s.db.QueryContext(ctx, q, args...)
+// CountStats 返回词库全局统计（不受列表筛选影响）。
+func (s *Store) CountStats(ctx context.Context) (LibraryStats, error) {
+	var stats LibraryStats
+	err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(1),
+		       COALESCE(SUM(CASE WHEN word_type = ? THEN 1 ELSE 0 END), 0),
+		       COALESCE(SUM(CASE WHEN word_type = ? THEN 1 ELSE 0 END), 0)
+		FROM words
+		WHERE deleted_at IS NULL AND library_id = ?`,
+		TypeNew, TypeMistake, MainLibraryID).
+		Scan(&stats.Total, &stats.NewWords, &stats.MistakeWords)
 	if err != nil {
-		return nil, fmt.Errorf("query words: %w", err)
+		return LibraryStats{}, fmt.Errorf("count stats: %w", err)
+	}
+	return stats, nil
+}
+
+// List 返回未软删的单词列表（按创建时间倒序），支持筛选与分页。
+func (s *Store) List(ctx context.Context, p ListParams) (ListResult, error) {
+	clause, args := s.buildListWhere(p)
+
+	var total int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM words WHERE `+clause, args...).
+		Scan(&total); err != nil {
+		return ListResult{}, fmt.Errorf("count words: %w", err)
+	}
+
+	q := `SELECT id, library_id, text, meaning_zh, phonetic, word_type, status,
+	             created_at, updated_at, last_edited_at, source
+	      FROM words
+	      WHERE ` + clause + ` ORDER BY created_at DESC`
+
+	queryArgs := append([]any{}, args...)
+	if p.PageSize > 0 {
+		page := p.Page
+		if page < 1 {
+			page = 1
+		}
+		offset := (page - 1) * p.PageSize
+		q += ` LIMIT ? OFFSET ?`
+		queryArgs = append(queryArgs, p.PageSize, offset)
+	}
+
+	rows, err := s.db.QueryContext(ctx, q, queryArgs...)
+	if err != nil {
+		return ListResult{}, fmt.Errorf("query words: %w", err)
 	}
 	defer rows.Close()
 
@@ -55,12 +103,15 @@ func (s *Store) List(ctx context.Context, p ListParams) ([]Word, error) {
 		var lastEdited sql.NullString
 		if err := rows.Scan(&w.ID, &w.LibraryID, &w.Text, &w.MeaningZh, &w.Phonetic,
 			&w.WordType, &w.Status, &w.CreatedAt, &w.UpdatedAt, &lastEdited, &w.Source); err != nil {
-			return nil, fmt.Errorf("scan word: %w", err)
+			return ListResult{}, fmt.Errorf("scan word: %w", err)
 		}
 		w.LastEditedAt = lastEdited.String
 		words = append(words, w)
 	}
-	return words, rows.Err()
+	if err := rows.Err(); err != nil {
+		return ListResult{}, err
+	}
+	return ListResult{Words: words, Total: total}, nil
 }
 
 // CreateWordParams 新增单词入参。

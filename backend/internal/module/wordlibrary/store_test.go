@@ -3,6 +3,7 @@ package wordlibrary
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"testing"
 
 	// 纯 Go SQLite 驱动
@@ -140,26 +141,34 @@ func TestList_Filters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(all) != 3 {
-		t.Errorf("List() = %d, want 3", len(all))
+	if len(all.Words) != 3 {
+		t.Errorf("List() = %d, want 3", len(all.Words))
 	}
 
 	// type 筛选
 	newOnly, _ := store.List(ctx, ListParams{Type: TypeNew})
-	if got := len(newOnly); got != 2 {
+	if got := len(newOnly.Words); got != 2 {
 		t.Errorf("type=new = %d, want 2", got)
 	}
 
-	// 搜索 q（匹配 text）
-	apple, _ := store.List(ctx, ListParams{Q: "apple"})
-	if len(apple) != 1 || apple[0].Text != "apple" {
-		t.Errorf("q=apple = %+v", apple)
+	// 搜索 q（前缀匹配 text）
+	apple, _ := store.List(ctx, ListParams{Q: "app"})
+	if len(apple.Words) != 1 || apple.Words[0].Text != "apple" {
+		t.Errorf("q=app = %+v", apple.Words)
+	}
+	appMid, _ := store.List(ctx, ListParams{Q: "ple"})
+	if len(appMid.Words) != 0 {
+		t.Errorf("q=ple 中间匹配应不命中, got %+v", appMid.Words)
 	}
 
-	// 搜索 q（匹配 meaning_zh 中文）
+	// 搜索 q（前缀匹配 meaning_zh 中文）
 	zh, _ := store.List(ctx, ListParams{Q: "书桌"})
-	if len(zh) != 1 || zh[0].Text != "desk" {
-		t.Errorf("q=书桌 = %+v", zh)
+	if len(zh.Words) != 1 || zh.Words[0].Text != "desk" {
+		t.Errorf("q=书桌 = %+v", zh.Words)
+	}
+	zhMid, _ := store.List(ctx, ListParams{Q: "桌"})
+	if len(zhMid.Words) != 0 {
+		t.Errorf("q=桌 中间匹配应不命中, got %+v", zhMid.Words)
 	}
 }
 
@@ -210,8 +219,8 @@ func TestDelete_PhysicalForUnlearned(t *testing.T) {
 	}
 	// 列表应为空
 	all, _ := store.List(ctx, ListParams{})
-	if len(all) != 0 {
-		t.Errorf("物理删后列表 = %d, want 0", len(all))
+	if len(all.Words) != 0 {
+		t.Errorf("物理删后列表 = %d, want 0", len(all.Words))
 	}
 	// 可重新插入（物理删后唯一索引不占位）
 	exist, _ := store.ExistsByTextMeaning(ctx, "apple", "苹果")
@@ -237,8 +246,8 @@ func TestDelete_LogicalForLearned(t *testing.T) {
 	}
 	// 列表查不到
 	all, _ := store.List(ctx, ListParams{})
-	if len(all) != 0 {
-		t.Errorf("软删后列表 = %d, want 0", len(all))
+	if len(all.Words) != 0 {
+		t.Errorf("软删后列表 = %d, want 0", len(all.Words))
 	}
 }
 
@@ -263,13 +272,60 @@ func TestList_ExcludesSoftDeleted(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows, _ := store.List(ctx, ListParams{})
-	if len(rows) != 0 {
-		t.Errorf("软删后 List() = %d, want 0", len(rows))
+	if len(rows.Words) != 0 {
+		t.Errorf("软删后 List() = %d, want 0", len(rows.Words))
 	}
 
 	// 软删的词不再算重复（部分唯一索引仅覆盖未删行）
 	exist, _ := store.ExistsByTextMeaning(ctx, "apple", "苹果")
 	if exist {
 		t.Error("软删后不应判重，应允许重新插入")
+	}
+}
+
+// TestList_Pagination 验证分页与 total 计数。
+func TestList_Pagination(t *testing.T) {
+	store := NewStore(newTestDB(t))
+	ctx := context.Background()
+	for i := 1; i <= 5; i++ {
+		if _, err := store.CreateWord(ctx, CreateWordParams{
+			Text: fmt.Sprintf("word%d", i), MeaningZh: fmt.Sprintf("词%d", i),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	page1, err := store.List(ctx, ListParams{Page: 1, PageSize: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page1.Words) != 2 || page1.Total != 5 {
+		t.Errorf("page1 = %+v, want 2 items total 5", page1)
+	}
+	page3, err := store.List(ctx, ListParams{Page: 3, PageSize: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page3.Words) != 1 || page3.Total != 5 {
+		t.Errorf("page3 = %+v, want 1 item total 5", page3)
+	}
+}
+
+// TestCountStats 验证词库统计。
+func TestCountStats(t *testing.T) {
+	store := NewStore(newTestDB(t))
+	ctx := context.Background()
+	if _, err := store.CreateWord(ctx, CreateWordParams{Text: "a", MeaningZh: "甲", WordType: TypeNew}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateWord(ctx, CreateWordParams{Text: "b", MeaningZh: "乙", WordType: TypeMistake}); err != nil {
+		t.Fatal(err)
+	}
+	stats, err := store.CountStats(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Total != 2 || stats.NewWords != 1 || stats.MistakeWords != 1 {
+		t.Errorf("stats = %+v, want total=2 new=1 mistake=1", stats)
 	}
 }

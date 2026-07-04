@@ -108,3 +108,24 @@ type UpdateWordRequest struct {
 type DeleteWordResponse struct {
 	Kind string `json:"kind"` // physical / logical
 }
+
+// LibraryStats 是词库全局统计（不受列表筛选影响）。
+type LibraryStats struct {
+	Total        int `json:"total"`
+	NewWords     int `json:"newWords"`
+	MistakeWords int `json:"mistakeWords"`
+}
+
+// PaginationMeta 是分页元数据。
+type PaginationMeta struct {
+	Page     int `json:"page"`
+	PageSize int `json:"pageSize"`
+	Total    int `json:"total"`
+}
+
+// WordListResponse 是 GET /words 的响应。
+type WordListResponse struct {
+	Data       []Word         `json:"data"`
+	Pagination PaginationMeta `json:"pagination"`
+	Stats      LibraryStats   `json:"stats"`
+}

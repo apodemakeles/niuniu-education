@@ -104,6 +104,47 @@ func TestHandle_ListWords(t *testing.T) {
 	if len(data) != 1 {
 		t.Errorf("data len = %d, want 1", len(data))
 	}
+	pagination := m["pagination"].(map[string]any)
+	if int(pagination["total"].(float64)) != 1 {
+		t.Errorf("pagination.total = %v, want 1", pagination["total"])
+	}
+	stats := m["stats"].(map[string]any)
+	if int(stats["total"].(float64)) != 1 {
+		t.Errorf("stats.total = %v, want 1", stats["total"])
+	}
+}
+
+func TestHandle_ListWords_FilterAndPagination(t *testing.T) {
+	h, _ := newTestHandler(t)
+	ctx := context.Background()
+	_, _ = h.store.CreateWord(ctx, CreateWordParams{Text: "apple", MeaningZh: "苹果", WordType: TypeNew})
+	_, _ = h.store.CreateWord(ctx, CreateWordParams{Text: "read", MeaningZh: "阅读", WordType: TypeMistake})
+	_, _ = h.store.CreateWord(ctx, CreateWordParams{Text: "desk", MeaningZh: "书桌", WordType: TypeNew})
+
+	handler := registerForTest(t, h)
+
+	w := doRequest(t, handler, "GET", "/api/v1/words?type=mistake", nil, "")
+	m := decodeBody(t, w)
+	if len(m["data"].([]any)) != 1 {
+		t.Errorf("type=mistake data len = %v, want 1", len(m["data"].([]any)))
+	}
+	pagination := m["pagination"].(map[string]any)
+	if int(pagination["total"].(float64)) != 1 {
+		t.Errorf("filtered total = %v, want 1", pagination["total"])
+	}
+	stats := m["stats"].(map[string]any)
+	if int(stats["total"].(float64)) != 3 {
+		t.Errorf("stats.total = %v, want 3", stats["total"])
+	}
+
+	w2 := doRequest(t, handler, "GET", "/api/v1/words?page=1&pageSize=2", nil, "")
+	m2 := decodeBody(t, w2)
+	if len(m2["data"].([]any)) != 2 {
+		t.Errorf("pageSize=2 data len = %v, want 2", len(m2["data"].([]any)))
+	}
+	if int(m2["pagination"].(map[string]any)["total"].(float64)) != 3 {
+		t.Errorf("pagination.total = %v, want 3", m2["pagination"].(map[string]any)["total"])
+	}
 }
 
 // --- POST /imports/ocr (multipart, mock provider) ---

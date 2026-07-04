@@ -32,12 +32,12 @@ func scopeStatus(scope string) string {
 
 // BuildDictationPreview 按导出范围生成默写表预览数据。
 func (h *Handler) BuildDictationPreview(ctx context.Context, scope, title string) (*DictationPreview, error) {
-	words, err := h.store.List(ctx, ListParams{Status: scopeStatus(scope)})
+	words, err := h.store.List(ctx, ListParams{Status: scopeStatus(scope), PageSize: 0})
 	if err != nil {
 		return nil, err
 	}
-	items := make([]DictationItem, 0, len(words))
-	for i, w := range words {
+	items := make([]DictationItem, 0, len(words.Words))
+	for i, w := range words.Words {
 		items = append(items, DictationItem{Index: i + 1, Meaning: w.MeaningZh})
 	}
 	if title == "" {
