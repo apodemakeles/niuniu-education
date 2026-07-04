@@ -46,5 +46,8 @@ test-results/
 e2e/test-results/
 e2e/playwright-report/
 
+# ========== 启停脚本运行时产物（PID、日志）==========
+.run/
+
 # ========== 原型缓存（如有）==========
 design/prototype/.cache/
