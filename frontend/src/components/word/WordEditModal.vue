@@ -55,11 +55,11 @@ async function onSave() {
       <form class="form-grid" @submit.prevent="onSave">
         <div class="field">
           <label>英文单词</label>
-          <input :value="word.text" readonly />
+          <input :value="word.text" data-testid="edit-text" readonly />
         </div>
         <div class="field">
           <label>中文</label>
-          <input v-model="meaningZh" required />
+          <input v-model="meaningZh" data-testid="edit-meaning" required />
         </div>
         <div class="field">
           <label>音标</label>

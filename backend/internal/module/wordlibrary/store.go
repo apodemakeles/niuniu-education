@@ -48,7 +48,8 @@ func (s *Store) List(ctx context.Context, p ListParams) ([]Word, error) {
 	}
 	defer rows.Close()
 
-	var words []Word
+	// 初始化为空切片而非 nil，保证序列化为 [] 而非 null（前端容错）
+	words := []Word{}
 	for rows.Next() {
 		var w Word
 		var lastEdited sql.NullString
@@ -125,6 +126,13 @@ func (s *Store) ExistsByTextMeaning(ctx context.Context, text, meaning string) (
 		return false, fmt.Errorf("check duplicate: %w", err)
 	}
 	return count > 0, nil
+}
+
+// ResetAll 物理清空所有单词（含软删行），仅供测试用。
+// 通过专用测试端点调用，生产路由表不注册该端点。
+func (s *Store) ResetAll(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM words`)
+	return err
 }
 
 // Get 按 ID 查询单个单词（未软删）。

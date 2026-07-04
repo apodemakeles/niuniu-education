@@ -5,9 +5,20 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+func splitCSV(v string) []string {
+	var out []string
+	for _, part := range strings.Split(v, ",") {
+		if s := strings.TrimSpace(part); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
 
 // Config 是应用运行配置，对应 data/config.yaml。
 type Config struct {
@@ -126,6 +137,10 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("NIUNIU_HOST"); v != "" {
 		cfg.Server.Host = v
+	}
+	if v := os.Getenv("NIUNIU_CORS_ALLOWED_ORIGINS"); v != "" {
+		// 逗号分隔的多个 origin，覆盖默认 allowedOrigins
+		cfg.Server.CORS.AllowedOrigins = splitCSV(v)
 	}
 	if v := os.Getenv("NIUNIU_OCR_PROVIDER"); v != "" {
 		cfg.OCR.Provider = v

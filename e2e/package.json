@@ -1,0 +1,14 @@
+{
+  "name": "niuniu-education-e2e",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug=cli"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0"
+  }
+}

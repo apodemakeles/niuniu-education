@@ -67,11 +67,11 @@ function onEnter() {
       <form class="form-grid" @submit.prevent="onEnter">
         <div class="field">
           <label>英文单词</label>
-          <input v-model="text" data-field="create-text" required />
+          <input v-model="text" data-testid="create-text" required />
         </div>
         <div class="field">
           <label>中文</label>
-          <input v-model="meaningZh" required />
+          <input v-model="meaningZh" data-testid="create-meaning" required />
         </div>
         <div class="field">
           <label>音标</label>

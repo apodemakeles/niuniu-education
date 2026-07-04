@@ -6,6 +6,7 @@ data/
 bin/
 frontend/dist/
 frontend/dist-ssr/
+frontend/.e2e-dist/
 backend/niuniu-api
 *.exe
 *.exe~
@@ -39,5 +40,11 @@ coverage.html
 .env.local
 .env.*.local
 
+# ========== e2e / 调试产物 ==========
+.playwright-cli/
+test-results/
+e2e/test-results/
+e2e/playwright-report/
+
 # ========== 原型缓存（如有）==========
-prototype/.cache/
+design/prototype/.cache/

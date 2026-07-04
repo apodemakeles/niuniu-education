@@ -96,8 +96,13 @@ func run() error {
 	wlHandler := wordlibrary.NewHandler(svc, store, db, cfg, logger)
 
 	// 6. HTTP 服务
+	enableTestEP := os.Getenv("NIUNIU_ENABLE_TEST_ENDPOINTS") == "1"
 	srv := server.New(cfg, logger, func(r server.SubRouter) {
 		wlHandler.Register(r)
+		if enableTestEP {
+			wlHandler.RegisterTestEndpoints(r)
+			logger.Info("测试端点已启用（/_test/reset）")
+		}
 	})
 	httpSrv := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),

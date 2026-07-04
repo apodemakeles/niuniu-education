@@ -2,14 +2,15 @@
 
 给自家孩子用的英语单词教辅系统。当前为 **MVP 阶段（家长端单词库管理）**。
 
-> 设计文档：[`docs/architecture.md`](docs/architecture.md) · 需求：[`docs/parent-word-library-management.md`](docs/parent-word-library-management.md)
+> 设计文档：[`design/docs/architecture.md`](design/docs/architecture.md) · 需求：[`design/docs/parent-word-library-management.md`](design/docs/parent-word-library-management.md)
 
 ## 目录结构
 
 ```
 niuniu-education/
-├── docs/        # 需求与架构文档
-├── prototype/   # 原型（仅参考，不参与构建）
+├── design/      # 设计内容：需求、架构文档与原型
+│   ├── docs/
+│   └── prototype/
 ├── frontend/    # 前端：Vue 3 + TypeScript + Vite
 ├── backend/     # 后端：Go + chi + SQLite
 ├── bin/         # 构建产物（gitignore）

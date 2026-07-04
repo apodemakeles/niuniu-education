@@ -50,6 +50,20 @@ func (h *Handler) Register(r Router) {
 	r.Post("/exports/dictation", h.handleExportDoc)
 }
 
+// RegisterTestEndpoints 注册仅测试用的端点（物理清空库等）。
+// 仅在 NIUNIU_ENABLE_TEST_ENDPOINTS=1 时由 main 调用，生产路由表不含这些端点。
+func (h *Handler) RegisterTestEndpoints(r Router) {
+	r.Post("/_test/reset", h.handleTestReset)
+}
+
+func (h *Handler) handleTestReset(w http.ResponseWriter, r *http.Request) {
+	if err := h.store.ResetAll(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", "重置失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"reset": true})
+}
+
 func (h *Handler) handleGetWord(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	w0, err := h.store.Get(r.Context(), id)

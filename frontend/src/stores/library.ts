@@ -12,7 +12,8 @@ export const useLibraryStore = defineStore('library', () => {
     loading.value = true
     error.value = null
     try {
-      words.value = await fetchWords()
+      const data = await fetchWords()
+      words.value = data || [] // 后端空库可能返回 null，容错为空数组
     } catch (e) {
       error.value = (e as Error).message
     } finally {

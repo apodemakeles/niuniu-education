@@ -3,7 +3,7 @@
 > 适用范围：家长端单词库管理（MVP）
 > 版本：v1.2 · 2026-07-04
 > 变更：前后端独立部署（去 embed）；字段与功能严格对齐原型（删除例句/难度/必背/批量/行内编辑/修改记录/设置页）
-> 配套文档：[家长端单词库管理设计](./parent-word-library-management.md)、原型 `prototype/parent-word-library/`
+> 配套文档：[家长端单词库管理设计](./parent-word-library-management.md)、原型 `../prototype/parent-word-library/`
 
 ---
 
@@ -107,11 +107,12 @@ data/
 
 ```
 niuniu-education/
-├── docs/                          # 需求与设计文档
-│   ├── parent-word-library-management.md
-│   └── architecture.md            # 本文档
-├── prototype/                     # 原型（仅参考，不参与构建）
-│   └── parent-word-library/
+├── design/                        # 设计内容
+│   ├── docs/                      # 需求与设计文档
+│   │   ├── parent-word-library-management.md
+│   │   └── architecture.md        # 本文档
+│   └── prototype/                 # 原型（仅参考，不参与构建）
+│       └── parent-word-library/
 ├── frontend/                      # 前端源码
 └── backend/                       # 后端源码
 ```

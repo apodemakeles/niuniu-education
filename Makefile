@@ -33,6 +33,9 @@ test-backend: ## 仅后端测试
 test-frontend: ## 仅前端测试
 	cd frontend && npm run test
 
+test-e2e: ## 端到端测试（Playwright，自动启动前后端）
+	cd e2e && npm install && PLAYWRIGHT_HTML_OPEN=never npx playwright test
+
 clean: ## 清理构建产物与数据目录
 	rm -rf bin frontend/dist
 	rm -rf data/niuniu.db data/niuniu.db-* data/config.yaml
