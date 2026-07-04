@@ -28,6 +28,17 @@ func (s *Service) RecognizeForDraft(ctx context.Context, image []byte, mimeType 
 	return fromOCRDraft(res.Rows), res.RawText, nil
 }
 
+// ParsePasteForDraft 解析粘贴的文本为草稿行（不入库）。
+// 支持格式（对齐 PRD 粘贴导入）：
+//   - "apple 苹果"            （空格分隔）
+//   - "apple,苹果,/ˈæpl/"     （逗号分隔）
+//   - "apple /ˈæpl/ 苹果"     （含音标）
+// 复用 ocr.ParseOCRText（它已支持这些分隔格式），只是不经过 OCR。
+func (s *Service) ParsePasteForDraft(text string) []DraftRowDTO {
+	rows := ocr.ParseOCRText(text)
+	return fromOCRDraft(rows)
+}
+
 // ConfirmImport 确认草稿入库。
 //
 // 规则（对齐 PRD "确认入库前的校验"）：

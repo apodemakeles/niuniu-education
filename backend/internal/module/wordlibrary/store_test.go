@@ -163,6 +163,94 @@ func TestList_Filters(t *testing.T) {
 	}
 }
 
+// TestUpdate_ChangesFieldsNotText 验证更新属性（不含 text），并刷新 last_edited_at。
+func TestUpdate_ChangesFieldsNotText(t *testing.T) {
+	store := NewStore(newTestDB(t))
+	ctx := context.Background()
+	w, _ := store.CreateWord(ctx, CreateWordParams{Text: "apple", MeaningZh: "苹果", WordType: TypeNew})
+
+	updated, err := store.Update(ctx, UpdateParams{
+		ID: w.ID, MeaningZh: "苹果果", Phonetic: "/ˈæpl/", WordType: TypeMistake, Status: StatusReinforce,
+	})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if updated.MeaningZh != "苹果果" || updated.WordType != TypeMistake || updated.Status != StatusReinforce {
+		t.Errorf("更新后字段不符: %+v", updated)
+	}
+	if updated.Text != "apple" {
+		t.Errorf("text 不应变化: got %q", updated.Text)
+	}
+	if updated.LastEditedAt == "" {
+		t.Error("last_edited_at 应被刷新")
+	}
+}
+
+// TestUpdate_NotFound 更新不存在的 ID 返回 ErrNotFound。
+func TestUpdate_NotFound(t *testing.T) {
+	store := NewStore(newTestDB(t))
+	_, err := store.Update(context.Background(), UpdateParams{ID: "nope", MeaningZh: "x"})
+	if err != ErrNotFound {
+		t.Errorf("got %v, want ErrNotFound", err)
+	}
+}
+
+// TestDelete_PhysicalForUnlearned 未学单词物理删除（列表查不到，可重新插入）。
+func TestDelete_PhysicalForUnlearned(t *testing.T) {
+	store := NewStore(newTestDB(t))
+	ctx := context.Background()
+	w, _ := store.CreateWord(ctx, CreateWordParams{Text: "apple", MeaningZh: "苹果"}) // 默认 unlearned
+
+	res, err := store.Delete(ctx, w.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Kind != DeletePhysical {
+		t.Errorf("kind = %s, want physical", res.Kind)
+	}
+	// 列表应为空
+	all, _ := store.List(ctx, ListParams{})
+	if len(all) != 0 {
+		t.Errorf("物理删后列表 = %d, want 0", len(all))
+	}
+	// 可重新插入（物理删后唯一索引不占位）
+	exist, _ := store.ExistsByTextMeaning(ctx, "apple", "苹果")
+	if exist {
+		t.Error("物理删后应可重新插入")
+	}
+}
+
+// TestDelete_LogicalForLearned 学习中的单词软删（仍占唯一索引位，列表查不到）。
+func TestDelete_LogicalForLearned(t *testing.T) {
+	store := NewStore(newTestDB(t))
+	ctx := context.Background()
+	w, _ := store.CreateWord(ctx, CreateWordParams{Text: "apple", MeaningZh: "苹果"})
+	// 改为学习中
+	_, _ = store.Update(ctx, UpdateParams{ID: w.ID, MeaningZh: "苹果", WordType: TypeNew, Status: StatusLearning})
+
+	res, err := store.Delete(ctx, w.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Kind != DeleteLogical {
+		t.Errorf("kind = %s, want logical", res.Kind)
+	}
+	// 列表查不到
+	all, _ := store.List(ctx, ListParams{})
+	if len(all) != 0 {
+		t.Errorf("软删后列表 = %d, want 0", len(all))
+	}
+}
+
+// TestDelete_NotFound 删除不存在的 ID 返回 ErrNotFound。
+func TestDelete_NotFound(t *testing.T) {
+	store := NewStore(newTestDB(t))
+	_, err := store.Delete(context.Background(), "nope")
+	if err != ErrNotFound {
+		t.Errorf("got %v, want ErrNotFound", err)
+	}
+}
+
 // TestList_ExcludesSoftDeleted 验证软删行不出现在列表。
 func TestList_ExcludesSoftDeleted(t *testing.T) {
 	db := newTestDB(t)

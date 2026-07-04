@@ -126,3 +126,90 @@ func (s *Store) ExistsByTextMeaning(ctx context.Context, text, meaning string) (
 	}
 	return count > 0, nil
 }
+
+// Get 按 ID 查询单个单词（未软删）。
+func (s *Store) Get(ctx context.Context, id string) (Word, error) {
+	q := `SELECT id, library_id, text, meaning_zh, phonetic, word_type, status,
+	             created_at, updated_at, last_edited_at, source
+	      FROM words WHERE id=? AND deleted_at IS NULL`
+	var w Word
+	var lastEdited sql.NullString
+	err := s.db.QueryRowContext(ctx, q, id).
+		Scan(&w.ID, &w.LibraryID, &w.Text, &w.MeaningZh, &w.Phonetic, &w.WordType, &w.Status,
+			&w.CreatedAt, &w.UpdatedAt, &lastEdited, &w.Source)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return Word{}, ErrNotFound
+		}
+		return Word{}, fmt.Errorf("get word: %w", err)
+	}
+	w.LastEditedAt = lastEdited.String
+	return w, nil
+}
+
+// UpdateParams 更新单词属性（不含 text，PRD：英文单词创建后不可改）。
+type UpdateParams struct {
+	ID         string
+	MeaningZh  string
+	Phonetic   string
+	WordType   string
+	Status     string
+}
+
+// Update 更新单词属性。普通字段修改不重置学习进度（不触碰 review_count 等）。
+// 若 wordType 改为易错词，status 不自动重置（按原型行为，交由家长在表单里设）。
+func (s *Store) Update(ctx context.Context, p UpdateParams) (Word, error) {
+	q := `UPDATE words
+	      SET meaning_zh=?, phonetic=?, word_type=?, status=?, last_edited_at=datetime('now'), updated_at=datetime('now')
+	      WHERE id=? AND deleted_at IS NULL`
+	res, err := s.db.ExecContext(ctx, q, p.MeaningZh, p.Phonetic, p.WordType, p.Status, p.ID)
+	if err != nil {
+		return Word{}, fmt.Errorf("update word: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Word{}, ErrNotFound
+	}
+	return s.Get(ctx, p.ID)
+}
+
+// ErrNotFound 表示单词不存在或已软删。
+var ErrNotFound = fmt.Errorf("单词不存在")
+
+// DeleteKind 表示删除方式，对应 PRD 删除策略。
+type DeleteKind string
+
+const (
+	DeletePhysical DeleteKind = "physical" // 物理删除（未学单词）
+	DeleteLogical  DeleteKind = "logical"  // 逻辑删除/软删（学习中/需强化/已掌握）
+)
+
+// DeleteResult 返回删除结果。
+type DeleteResult struct {
+	Kind DeleteKind `json:"kind"`
+}
+
+// Delete 按 PRD 删除策略删除单词：
+//   - 未学（unlearned）：物理删除
+//   - 学习中/需强化/已掌握：软删（置 deleted_at），保留学习记录
+func (s *Store) Delete(ctx context.Context, id string) (*DeleteResult, error) {
+	w, err := s.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if w.Status == StatusUnlearned {
+		// 物理删除：先软删以释放部分唯一索引占位，再物理删除
+		// （若直接 DELETE，唯一索引会随行消失，无需额外处理；这里直接 DELETE）
+		if _, err := s.db.ExecContext(ctx, `DELETE FROM words WHERE id=?`, id); err != nil {
+			return nil, fmt.Errorf("physical delete: %w", err)
+		}
+		return &DeleteResult{Kind: DeletePhysical}, nil
+	}
+
+	// 逻辑删除
+	if _, err := s.db.ExecContext(ctx,
+		`UPDATE words SET deleted_at=datetime('now'), updated_at=datetime('now') WHERE id=?`, id); err != nil {
+		return nil, fmt.Errorf("logical delete: %w", err)
+	}
+	return &DeleteResult{Kind: DeleteLogical}, nil
+}

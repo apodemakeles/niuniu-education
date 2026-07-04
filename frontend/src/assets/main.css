@@ -452,3 +452,144 @@ textarea {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* 表单 */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field.full {
+  grid-column: 1 / -1;
+}
+
+.field label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.field input[readonly] {
+  color: var(--muted);
+  background: #f1eee5;
+}
+
+/* 表格操作列 */
+.row-actions {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+th:last-child,
+td:last-child {
+  min-width: 112px;
+}
+
+/* 搜索框 */
+.table-toolbar input[type='search'] {
+  width: min(360px, 100%);
+}
+
+/* 顶部操作 */
+.top-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* 导出布局 */
+.export-layout {
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr);
+  gap: 16px;
+  margin: 8px 0;
+}
+
+.export-controls {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+/* 默写表 */
+.dictation-sheet {
+  padding: 14px;
+  background: white;
+  border: 1px solid var(--line);
+}
+
+.dictation-title {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.dictation-title .title-input {
+  width: 100%;
+  color: var(--green-dark);
+  font-size: 20px;
+  font-weight: 900;
+  text-align: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.meta-line {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.dictation-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.dictation-table th,
+.dictation-table td {
+  border: 1px solid var(--line);
+  padding: 9px;
+  font-size: 14px;
+}
+
+.dictation-table th:nth-child(1),
+.dictation-table td.idx {
+  width: 54px;
+  text-align: center;
+}
+
+.dictation-table th:nth-child(2),
+.dictation-table td:nth-child(2) {
+  width: 34%;
+}
+
+.meaning-input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  min-height: auto;
+  padding: 0;
+}
+
+.answer-lines {
+  min-height: 34px;
+  background-image: linear-gradient(to bottom, transparent 30px, rgba(23, 32, 28, 0.35) 31px);
+  background-size: 100% 32px;
+}
+
+@media (max-width: 980px) {
+  .export-layout {
+    grid-template-columns: 1fr;
+  }
+}

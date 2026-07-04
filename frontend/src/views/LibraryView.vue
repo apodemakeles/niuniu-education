@@ -1,23 +1,43 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useLibraryStore } from '@/stores/library'
+import { deleteWord } from '@/api/words'
 import { WORD_TYPE_TEXT, WORD_STATUS_TEXT } from '@/types/word'
+import type { Word, WordType } from '@/types/word'
 import type { ImportResult } from '@/types/draft'
 import PhotoImportModal from '@/components/import/PhotoImportModal.vue'
+import PasteImportModal from '@/components/import/PasteImportModal.vue'
+import WordEditModal from '@/components/word/WordEditModal.vue'
+import WordCreateModal from '@/components/word/WordCreateModal.vue'
+import ExportModal from '@/components/export/ExportModal.vue'
 import Toast from '@/components/common/Toast.vue'
 
 const store = useLibraryStore()
-const showPhotoModal = ref(false)
 const toast = ref<InstanceType<typeof Toast> | null>(null)
 
+// 弹窗状态
+const showPhotoModal = ref(false)
+const showPasteModal = ref(false)
+const showCreateModal = ref(false)
+const showExportModal = ref(false)
+const editingWord = ref<Word | null>(null)
+
+// 筛选
 const activeType = ref<'all' | 'new' | 'mistake'>('all')
 const statusFilter = ref('all')
+const searchQuery = ref('')
 
 const filteredWords = computed(() => {
   return store.words.filter((w) => {
     const matchType = activeType.value === 'all' || w.wordType === activeType.value
     const matchStatus = statusFilter.value === 'all' || w.status === statusFilter.value
-    return matchType && matchStatus
+    const q = searchQuery.value.trim().toLowerCase()
+    const matchQuery =
+      q === '' ||
+      w.text.toLowerCase().includes(q) ||
+      w.meaningZh.toLowerCase().includes(q) ||
+      (w.phonetic || '').toLowerCase().includes(q)
+    return matchType && matchStatus && matchQuery
   })
 })
 
@@ -40,8 +60,9 @@ function reload() {
   store.load()
 }
 
-function onImportConfirmed(result: ImportResult) {
-  showPhotoModal.value = false
+function onImportConfirmed(result: ImportResult, source: 'photo' | 'paste') {
+  if (source === 'photo') showPhotoModal.value = false
+  else showPasteModal.value = false
   const parts: string[] = []
   if (result.added) parts.push(`新增 ${result.added}`)
   if (result.skipped) parts.push(`跳过重复 ${result.skipped}`)
@@ -49,6 +70,41 @@ function onImportConfirmed(result: ImportResult) {
   toast.value?.show(parts.length ? `已入库：${parts.join('，')}` : '没有变化')
   reload()
 }
+
+function onWordCreated() {
+  toast.value?.show('已保存，继续录入下一个。')
+  reload()
+}
+
+function onWordSaved() {
+  editingWord.value = null
+  toast.value?.show('单词已更新，孩子学习进度未重置。')
+  reload()
+}
+
+async function onDelete(w: Word) {
+  // 对齐原型 app.js：未学直接删，其余软删
+  const isUnlearned = w.status === 'unlearned'
+  const confirmMsg = isUnlearned
+    ? `确认删除「${w.text}」？未学单词将直接删除。`
+    : `确认移除「${w.text}」？将保留学习记录，可后续恢复。`
+  if (!window.confirm(confirmMsg)) return
+
+  try {
+    const res = await deleteWord(w.id)
+    toast.value?.show(
+      res.kind === 'physical' ? '未学单词已直接删除。' : '已从单词库移除，学习记录保留。',
+    )
+    reload()
+  } catch (e) {
+    toast.value?.show('删除失败：' + (e as Error).message)
+  }
+}
+
+// 录入弹窗默认类型随当前分类联动
+const createDefaultType = computed<WordType | undefined>(() =>
+  activeType.value === 'new' ? 'new' : activeType.value === 'mistake' ? 'mistake' : undefined,
+)
 
 onMounted(() => store.load())
 </script>
@@ -59,6 +115,9 @@ onMounted(() => store.load())
       <div>
         <p class="eyebrow">Parent Word Library</p>
         <h1>单词库管理</h1>
+      </div>
+      <div class="top-actions">
+        <button class="secondary-btn" type="button" @click="showExportModal = true">导出</button>
       </div>
     </header>
 
@@ -91,12 +150,13 @@ onMounted(() => store.load())
         </div>
 
         <div class="action-strip">
-          <button class="primary-btn" type="button" @click="showPhotoModal = true">
-            拍照导入
-          </button>
+          <button class="primary-btn" type="button" @click="showCreateModal = true">逐个录入</button>
+          <button class="secondary-btn" type="button" @click="showPasteModal = true">粘贴导入</button>
+          <button class="secondary-btn" type="button" @click="showPhotoModal = true">拍照导入</button>
         </div>
 
         <div class="table-toolbar">
+          <input v-model="searchQuery" type="search" placeholder="搜索单词、中文、音标" />
           <select v-model="statusFilter" aria-label="状态筛选">
             <option value="all">全部状态</option>
             <option value="unlearned">未学</option>
@@ -118,6 +178,7 @@ onMounted(() => store.load())
                   <th>音标</th>
                   <th>类型</th>
                   <th>状态</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -125,15 +186,17 @@ onMounted(() => store.load())
                   <td><strong>{{ w.text }}</strong></td>
                   <td>{{ w.meaningZh }}</td>
                   <td>{{ w.phonetic || '未填写' }}</td>
+                  <td><span class="tag" :class="w.wordType">{{ WORD_TYPE_TEXT[w.wordType] }}</span></td>
+                  <td><span class="status-pill" :class="w.status">{{ WORD_STATUS_TEXT[w.status] }}</span></td>
                   <td>
-                    <span class="tag" :class="w.wordType">{{ WORD_TYPE_TEXT[w.wordType] }}</span>
-                  </td>
-                  <td>
-                    <span class="status-pill" :class="w.status">{{ WORD_STATUS_TEXT[w.status] }}</span>
+                    <div class="row-actions">
+                      <button class="link-btn" type="button" @click="editingWord = w">编辑</button>
+                      <button class="link-btn" type="button" @click="onDelete(w)">删除</button>
+                    </div>
                   </td>
                 </tr>
                 <tr v-if="filteredWords.length === 0">
-                  <td colspan="5" class="note">没有匹配的单词。</td>
+                  <td colspan="6" class="note">没有匹配的单词。</td>
                 </tr>
               </tbody>
             </table>
@@ -144,9 +207,27 @@ onMounted(() => store.load())
 
     <PhotoImportModal
       v-if="showPhotoModal"
-      @confirmed="onImportConfirmed"
+      @confirmed="(r) => onImportConfirmed(r, 'photo')"
       @closed="showPhotoModal = false"
     />
+    <PasteImportModal
+      v-if="showPasteModal"
+      @confirmed="(r) => onImportConfirmed(r, 'paste')"
+      @closed="showPasteModal = false"
+    />
+    <WordCreateModal
+      v-if="showCreateModal"
+      :default-type="createDefaultType"
+      @created="onWordCreated"
+      @closed="showCreateModal = false"
+    />
+    <WordEditModal
+      v-if="editingWord"
+      :word="editingWord"
+      @saved="onWordSaved"
+      @closed="editingWord = null"
+    />
+    <ExportModal v-if="showExportModal" @closed="showExportModal = false" />
     <Toast ref="toast" />
   </main>
 </template>

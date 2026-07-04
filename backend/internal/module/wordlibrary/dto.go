@@ -85,6 +85,26 @@ func orDefault(v, def string) string {
 }
 
 func draftRowID(i int) string {
-	// 简单稳定 ID，前端可用作 key
 	return "draft-" + string(rune('a'+i))
+}
+
+// CreateWordRequest 是手动逐个录入的请求体。
+type CreateWordRequest struct {
+	Text      string `json:"text"`
+	MeaningZh string `json:"meaningZh"`
+	Phonetic  string `json:"phonetic"`
+	WordType  string `json:"wordType"`
+}
+
+// UpdateWordRequest 是编辑单词属性的请求体（不含 text）。
+type UpdateWordRequest struct {
+	MeaningZh string `json:"meaningZh"`
+	Phonetic  string `json:"phonetic"`
+	WordType  string `json:"wordType"`
+	Status    string `json:"status"`
+}
+
+// DeleteWordResponse 是删除单词的响应。
+type DeleteWordResponse struct {
+	Kind string `json:"kind"` // physical / logical
 }

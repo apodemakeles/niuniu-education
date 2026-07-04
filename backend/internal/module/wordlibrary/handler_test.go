@@ -46,8 +46,10 @@ type testRouter struct {
 	prefix string
 }
 
-func (r *testRouter) Get(p string, h http.HandlerFunc)  { r.mux.HandleFunc(r.prefix+p, h) }
-func (r *testRouter) Post(p string, h http.HandlerFunc) { r.mux.HandleFunc(r.prefix+p, h) }
+func (r *testRouter) Get(p string, h http.HandlerFunc)    { r.mux.HandleFunc("GET "+r.prefix+p, h) }
+func (r *testRouter) Post(p string, h http.HandlerFunc)   { r.mux.HandleFunc("POST "+r.prefix+p, h) }
+func (r *testRouter) Put(p string, h http.HandlerFunc)    { r.mux.HandleFunc("PUT "+r.prefix+p, h) }
+func (r *testRouter) Delete(p string, h http.HandlerFunc) { r.mux.HandleFunc("DELETE "+r.prefix+p, h) }
 
 // addImageField 向 multipart 写入一个带正确 image/png Content-Type 的 image 字段。
 // 注意：不用 multipart.Writer.CreateFormFile（它写 application/octet-stream），
@@ -223,7 +225,156 @@ func TestHandle_ConfirmImport_BadJSON(t *testing.T) {
 	}
 }
 
-// --- OCR 全链路：OCR 草稿 → 确认入库 → 列表反映（集成测试）---
+// --- POST /words 手动录入 ---
+
+func TestHandle_CreateWord(t *testing.T) {
+	h, _ := newTestHandler(t)
+	handler := registerForTest(t, h)
+
+	payload := `{"text":"apple","meaningZh":"苹果","wordType":"new"}`
+	w := doRequest(t, handler, "POST", "/api/v1/words", strings.NewReader(payload), "application/json")
+	if w.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body=%s", w.Code, w.Body.String())
+	}
+	m := decodeBody(t, w)
+	if m["text"] != "apple" {
+		t.Errorf("text = %v", m["text"])
+	}
+	if m["status"] != StatusUnlearned {
+		t.Errorf("默认状态应为 unlearned, got %v", m["status"])
+	}
+}
+
+func TestHandle_CreateWord_EmptyText(t *testing.T) {
+	h, _ := newTestHandler(t)
+	handler := registerForTest(t, h)
+	w := doRequest(t, handler, "POST", "/api/v1/words", strings.NewReader(`{"text":"","meaningZh":"x"}`), "application/json")
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", w.Code)
+	}
+}
+
+func TestHandle_CreateWord_DuplicateConflict(t *testing.T) {
+	h, _ := newTestHandler(t)
+	handler := registerForTest(t, h)
+	payload := `{"text":"apple","meaningZh":"苹果"}`
+	// 第一次成功
+	doRequest(t, handler, "POST", "/api/v1/words", strings.NewReader(payload), "application/json")
+	// 第二次 409
+	w := doRequest(t, handler, "POST", "/api/v1/words", strings.NewReader(payload), "application/json")
+	if w.Code != http.StatusConflict {
+		t.Errorf("重复录入 status = %d, want 409; body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "WORD_DUPLICATE") {
+		t.Errorf("应返回 WORD_DUPLICATE 错误码: %s", w.Body.String())
+	}
+}
+
+func TestHandle_CreateWord_ForceOverrideDuplicate(t *testing.T) {
+	h, _ := newTestHandler(t)
+	handler := registerForTest(t, h)
+	payload := `{"text":"apple","meaningZh":"苹果"}`
+	doRequest(t, handler, "POST", "/api/v1/words", strings.NewReader(payload), "application/json")
+	// 带 force=1，但因 text+meaningZh 完全相同，store 仍会因唯一索引报错——
+	// 此测试验证 force 参数能跳过 handler 的 409 拦截（落库错误另算）
+	w := doRequest(t, handler, "POST", "/api/v1/words?force=1", strings.NewReader(payload), "application/json")
+	// 完全重复时即使 force 也会因唯一约束失败，预期 500（这是合理的，force 主要用于 text 相同释义不同的场景）
+	if w.Code == http.StatusConflict {
+		t.Errorf("force=1 不应再返回 409")
+	}
+}
+
+// --- PUT /words/{id} 编辑 ---
+
+func TestHandle_UpdateWord(t *testing.T) {
+	h, _ := newTestHandler(t)
+	handler := registerForTest(t, h)
+	// 先建一个
+	w0 := doRequest(t, handler, "POST", "/api/v1/words", strings.NewReader(`{"text":"apple","meaningZh":"苹果","wordType":"new"}`), "application/json")
+	id := decodeBody(t, w0)["id"].(string)
+
+	payload := `{"meaningZh":"苹果果","phonetic":"/ˈæpl/","wordType":"mistake","status":"reinforce"}`
+	w := doRequest(t, handler, "PUT", "/api/v1/words/"+id, strings.NewReader(payload), "application/json")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
+	}
+	m := decodeBody(t, w)
+	if m["meaningZh"] != "苹果果" || m["wordType"] != "mistake" {
+		t.Errorf("更新后字段不符: %v", m)
+	}
+}
+
+func TestHandle_UpdateWord_NotFound(t *testing.T) {
+	h, _ := newTestHandler(t)
+	handler := registerForTest(t, h)
+	w := doRequest(t, handler, "PUT", "/api/v1/words/nope", strings.NewReader(`{"meaningZh":"x","wordType":"new","status":"unlearned"}`), "application/json")
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", w.Code)
+	}
+}
+
+// --- DELETE /words/{id} ---
+
+func TestHandle_DeleteWord_Physical(t *testing.T) {
+	h, _ := newTestHandler(t)
+	handler := registerForTest(t, h)
+	w0 := doRequest(t, handler, "POST", "/api/v1/words", strings.NewReader(`{"text":"apple","meaningZh":"苹果","wordType":"new"}`), "application/json")
+	id := decodeBody(t, w0)["id"].(string)
+
+	w := doRequest(t, handler, "DELETE", "/api/v1/words/"+id, nil, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	m := decodeBody(t, w)
+	if m["kind"] != "physical" {
+		t.Errorf("未学词应物理删除, kind = %v", m["kind"])
+	}
+}
+
+func TestHandle_DeleteWord_Logical(t *testing.T) {
+	h, _ := newTestHandler(t)
+	handler := registerForTest(t, h)
+	// 建一个并改为"学习中"
+	w0 := doRequest(t, handler, "POST", "/api/v1/words", strings.NewReader(`{"text":"apple","meaningZh":"苹果","wordType":"new"}`), "application/json")
+	id := decodeBody(t, w0)["id"].(string)
+	doRequest(t, handler, "PUT", "/api/v1/words/"+id, strings.NewReader(`{"meaningZh":"苹果","phonetic":"","wordType":"new","status":"learning"}`), "application/json")
+
+	w := doRequest(t, handler, "DELETE", "/api/v1/words/"+id, nil, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	m := decodeBody(t, w)
+	if m["kind"] != "logical" {
+		t.Errorf("学习中应软删, kind = %v", m["kind"])
+	}
+}
+
+func TestHandle_DeleteWord_NotFound(t *testing.T) {
+	h, _ := newTestHandler(t)
+	handler := registerForTest(t, h)
+	w := doRequest(t, handler, "DELETE", "/api/v1/words/nope", nil, "")
+	if w.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", w.Code)
+	}
+}
+
+// --- GET /words/{id} ---
+
+func TestHandle_GetWord(t *testing.T) {
+	h, _ := newTestHandler(t)
+	handler := registerForTest(t, h)
+	w0 := doRequest(t, handler, "POST", "/api/v1/words", strings.NewReader(`{"text":"apple","meaningZh":"苹果","wordType":"new"}`), "application/json")
+	id := decodeBody(t, w0)["id"].(string)
+
+	w := doRequest(t, handler, "GET", "/api/v1/words/"+id, nil, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	m := decodeBody(t, w)
+	if m["text"] != "apple" {
+		t.Errorf("text = %v", m["text"])
+	}
+}
 
 func TestIntegration_OCRToLibrary(t *testing.T) {
 	h, _ := newTestHandler(t)

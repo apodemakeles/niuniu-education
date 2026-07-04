@@ -105,6 +105,41 @@ func TestConfirmImport_DuplicateButDifferentMeaningAdds(t *testing.T) {
 	}
 }
 
+// TestParsePasteForDraft 验证粘贴文本解析为草稿行（不写库）。
+func TestParsePasteForDraft(t *testing.T) {
+	svc, _ := newTestService(t)
+
+	cases := []struct {
+		name  string
+		text  string
+		want  []struct{ text, meaning string }
+	}{
+		{
+			"空格分隔含音标",
+			"apple /ˈæpl/ 苹果\nbanana /bəˈnɑːnə/ 香蕉",
+			[]struct{ text, meaning string }{{"apple", "苹果"}, {"banana", "香蕉"}},
+		},
+		{
+			"逗号分隔",
+			"apple,苹果,/ˈæpl/\nread,阅读",
+			[]struct{ text, meaning string }{{"apple", "苹果"}, {"read", "阅读"}},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rows := svc.ParsePasteForDraft(c.text)
+			if len(rows) != len(c.want) {
+				t.Fatalf("got %d rows, want %d: %+v", len(rows), len(c.want), rows)
+			}
+			for i, w := range c.want {
+				if rows[i].Text != w.text || rows[i].MeaningZh != w.meaning {
+					t.Errorf("row%d = %+v, want text=%q meaning=%q", i, rows[i], w.text, w.meaning)
+				}
+			}
+		})
+	}
+}
+
 // TestRecognizeForDraft 用 mock provider 验证草稿生成（不写库）。
 func TestRecognizeForDraft(t *testing.T) {
 	svc, store := newTestService(t)

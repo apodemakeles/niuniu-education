@@ -33,12 +33,119 @@ func NewHandler(svc *Service, store *Store, db *sql.DB, cfg *config.Config, logg
 type Router interface {
 	Get(pattern string, h http.HandlerFunc)
 	Post(pattern string, h http.HandlerFunc)
+	Put(pattern string, h http.HandlerFunc)
+	Delete(pattern string, h http.HandlerFunc)
 }
 
 func (h *Handler) Register(r Router) {
 	r.Get("/words", h.handleListWords)
+	r.Get("/words/{id}", h.handleGetWord)
+	r.Post("/words", h.handleCreateWord)
+	r.Put("/words/{id}", h.handleUpdateWord)
+	r.Delete("/words/{id}", h.handleDeleteWord)
+	r.Post("/imports/parse", h.handleImportParse)
 	r.Post("/imports/ocr", h.handleImportOCR)
 	r.Post("/imports/confirm", h.handleConfirmImport)
+	r.Post("/exports/dictation:preview", h.handleExportPreview)
+	r.Post("/exports/dictation", h.handleExportDoc)
+}
+
+func (h *Handler) handleGetWord(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	w0, err := h.store.Get(r.Context(), id)
+	if err != nil {
+		if err == ErrNotFound {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "单词不存在")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", "查询单词失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, w0)
+}
+
+// handleCreateWord 手动逐个录入。
+func (h *Handler) handleCreateWord(w http.ResponseWriter, r *http.Request) {
+	var req CreateWordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "请求体格式错误")
+		return
+	}
+	if strings.TrimSpace(req.Text) == "" {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "英文单词不能为空")
+		return
+	}
+	if strings.TrimSpace(req.MeaningZh) == "" {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "中文释义不能为空")
+		return
+	}
+
+	// 重复提示（text+meaningZh 命中）：PRD 要求优先提示，不强拦。
+	// 手动录入返回 409 让前端二次确认；前端确认后可带 force 重新提交。
+	exists, err := h.store.ExistsByTextMeaning(r.Context(), req.Text, req.MeaningZh)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", "查重失败")
+		return
+	}
+	if exists && r.URL.Query().Get("force") != "1" {
+		writeError(w, http.StatusConflict, "WORD_DUPLICATE", "词库内已存在该单词")
+		return
+	}
+
+	w0, err := h.store.CreateWord(r.Context(), CreateWordParams{
+		Text:      strings.TrimSpace(req.Text),
+		MeaningZh: strings.TrimSpace(req.MeaningZh),
+		Phonetic:  req.Phonetic,
+		WordType:  req.WordType,
+		Source:    SourceManual,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", "新增单词失败")
+		h.logger.Error("create word", slog.Any("err", err))
+		return
+	}
+	writeJSON(w, http.StatusCreated, w0)
+}
+
+// handleUpdateWord 编辑单词属性（不含 text）。
+func (h *Handler) handleUpdateWord(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var req UpdateWordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "请求体格式错误")
+		return
+	}
+	w0, err := h.store.Update(r.Context(), UpdateParams{
+		ID:        id,
+		MeaningZh: req.MeaningZh,
+		Phonetic:  req.Phonetic,
+		WordType:  req.WordType,
+		Status:    req.Status,
+	})
+	if err != nil {
+		if err == ErrNotFound {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "单词不存在")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", "更新失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, w0)
+}
+
+// handleDeleteWord 删除单词（按 status 走物理/逻辑删除）。
+func (h *Handler) handleDeleteWord(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	res, err := h.store.Delete(r.Context(), id)
+	if err != nil {
+		if err == ErrNotFound {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "单词不存在")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", "删除失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, DeleteWordResponse{Kind: string(res.Kind)})
 }
 
 func (h *Handler) handleListWords(w http.ResponseWriter, r *http.Request) {
@@ -103,6 +210,62 @@ func (h *Handler) handleImportOCR(w http.ResponseWriter, r *http.Request) {
 		Rows:    rows,
 		RawText: rawText,
 	})
+}
+
+// handleImportParse 解析粘贴的文本为草稿行（不入库）。
+func (h *Handler) handleImportParse(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "请求体格式错误")
+		return
+	}
+	if strings.TrimSpace(req.Text) == "" {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "文本不能为空")
+		return
+	}
+	rows := h.svc.ParsePasteForDraft(req.Text)
+	writeJSON(w, http.StatusOK, map[string]any{"rows": rows})
+}
+
+// handleExportPreview 生成默写表预览数据（前端渲染表格）。
+func (h *Handler) handleExportPreview(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Scope string `json:"scope"` // all / unlearned / learning / reinforce / mastered
+		Title string `json:"title"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req) // body 可选
+	preview, err := h.BuildDictationPreview(r.Context(), req.Scope, req.Title)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", "生成预览失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, preview)
+}
+
+// handleExportDoc 生成 Word 兼容 HTML 并以 .doc 下载。
+// 家长可在前端预览阶段临时修改中文，修改内容不回写词库，仅当次导出生效。
+func (h *Handler) handleExportDoc(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Title string           `json:"title"`
+		Items []map[string]any `json:"items"` // 预览阶段可能被编辑过的中文
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "请求体格式错误")
+		return
+	}
+	if len(req.Items) == 0 {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "没有可导出的内容")
+		return
+	}
+	items := parseExportItems(req.Items)
+	doc := BuildDictationDoc(req.Title, items)
+
+	w.Header().Set("Content-Type", "application/msword; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filenameFromTitle(req.Title)+`"; filename*=UTF-8''`+filenameFromTitle(req.Title))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(doc))
 }
 
 // handleConfirmImport 确认草稿入库。

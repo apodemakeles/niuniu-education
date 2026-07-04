@@ -12,11 +12,13 @@ import (
 	"github.com/go-chi/cors"
 )
 
-// SubRouter 是业务模块挂载路由用的最小接口（Get/Post）。
+// SubRouter 是业务模块挂载路由用的最小接口（Get/Post/Put/Delete）。
 // chi.Router 天然满足该接口，wordlibrary.Handler.Register 接收同名接口。
 type SubRouter interface {
 	Get(pattern string, h http.HandlerFunc)
 	Post(pattern string, h http.HandlerFunc)
+	Put(pattern string, h http.HandlerFunc)
+	Delete(pattern string, h http.HandlerFunc)
 }
 
 // Server 负责 HTTP 路由装配。业务路由由各模块 Handler 自行注册。
