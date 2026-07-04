@@ -151,14 +151,21 @@ func isHeaderRow(cells []string) bool {
 }
 
 // --- 策略 2：空格/制表符分隔 ---
-// 形如：apple /ˈæpl/ 苹果   或   apple,苹果,/ˈæpl/
+// 形如：apple,苹果,/ˈæpl/   或   apple\t苹果
+// 注意：含完整音标 /.../ 或中英混排的行不在此处理（音标会被空格拆碎），
+// 交给 tryParseMixed 按音标/CJK 边界分离。
 func tryParseDelimited(lines []string) ([]DraftRow, bool) {
 	var rows []DraftRow
 	matched := 0
 	for _, l := range lines {
-		// 逗号优先，其次连续空格/制表符
+		isCommaTab := strings.Contains(l, ",") || strings.Contains(l, "\t")
+		// 空格分隔时：含完整音标 /.../ 或 CJK 的行跳过（音标/中文会被空格拆碎），交给 mixed
+		// 逗号/制表符分隔时：音标和中文是完整 cell，正常处理
+		if !isCommaTab && (hasCompletePhonetic(l) || containsCJK(l)) {
+			continue
+		}
 		var parts []string
-		if strings.Contains(l, ",") || strings.Contains(l, "\t") {
+		if isCommaTab {
 			parts = splitFields(l, []string{",", "\t"})
 		} else {
 			parts = strings.Fields(l)
@@ -169,7 +176,9 @@ func tryParseDelimited(lines []string) ([]DraftRow, bool) {
 			matched++
 		}
 	}
-	if matched == 0 {
+	// 仅当大部分行（>50%）匹配时才认为分隔符策略成立，
+	// 否则可能是误判（如 "Unit 4" 这种偶发匹配），应让位给 mixed 策略。
+	if matched == 0 || len(lines) > 0 && matched*2 < len(lines) {
 		return nil, false
 	}
 	return rows, true
@@ -203,8 +212,19 @@ func tryParseMixed(lines []string) []DraftRow {
 	return rows
 }
 
+var (
+	indexPrefixRe = regexp.MustCompile(`^\d+[\.\)、]\s*`)
+	pageSuffixRe  = regexp.MustCompile(`\s*p\.\s*\d+\s*$`) // 行尾页码 p. 30 / p.44
+)
+
 func parseMixedLine(l string) (DraftRow, bool) {
-	l = stripLeadingIndex(l) // 去掉 "1. " 序号
+	l = stripLeadingIndex(l)            // 去掉 "1. " 序号
+	l = strings.TrimSpace(l)
+	l = strings.TrimLeft(l, "*")        // 去掉行首星号标记（教材重点词常带 *）
+	l = strings.TrimSpace(l)
+	l = pageSuffixRe.ReplaceAllString(l, "") // 去掉行尾页码 p. 30
+	l = strings.TrimSpace(l)
+
 	// 找第一段 CJK（中文释义）的起始位置
 	cjkStart := indexOfFirstCJK(l)
 	if cjkStart < 0 {
@@ -219,6 +239,9 @@ func parseMixedLine(l string) (DraftRow, bool) {
 	}
 	enPart := strings.TrimSpace(l[:cjkStart])
 	zhPart := strings.TrimSpace(l[cjkStart:])
+	// 中文释义尾部可能也带页码（如"消防站 p. 30"在 CJK 之后混了 ASCII）
+	zhPart = pageSuffixRe.ReplaceAllString(zhPart, "")
+	zhPart = strings.TrimSpace(zhPart)
 	enPart = strings.Trim(enPart, "|")
 	text, phonetic := splitTextAndPhonetic(enPart)
 	if text == "" {
@@ -263,6 +286,17 @@ func buildRowFromCells(cells []string) (DraftRow, bool) {
 func isPhonetic(s string) bool {
 	s = strings.TrimSpace(s)
 	return len(s) >= 2 && strings.HasPrefix(s, "/") && strings.HasSuffix(s, "/")
+}
+
+// hasCompletePhonetic 判断整行是否含完整的音标片段（/.../）。
+// 用于让 tryParseDelimited 跳过含音标的行，交给 mixed 策略处理。
+func hasCompletePhonetic(l string) bool {
+	i := strings.Index(l, "/")
+	if i < 0 {
+		return false
+	}
+	j := strings.Index(l[i+1:], "/")
+	return j >= 0 // 存在第二个 /
 }
 
 // containsCJK 判断是否含 CJK 统一表意文字（汉字）。
@@ -310,8 +344,6 @@ func splitTextAndPhonetic(s string) (text, phonetic string) {
 	}
 	return s, ""
 }
-
-var indexPrefixRe = regexp.MustCompile(`^\d+[\.\)、]\s*`)
 
 // stripLeadingIndex 去掉行首序号前缀，如 "1. "、"2) "、"3、 "。
 func stripLeadingIndex(s string) string {

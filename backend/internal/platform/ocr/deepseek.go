@@ -8,37 +8,49 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
-// DeepSeekProvider 通过 OpenAI 兼容接口调用 DeepSeek-OCR 模型。
+// OpenAICompatProvider 通过 OpenAI 兼容接口调用视觉模型。
 //
-// 经实测（~/work/deepseek-ocr-demo）：
-//   - 走硅基流动 endpoint：https://api.siliconflow.cn/v1
-//   - 模型名：deepseek-ai/DeepSeek-OCR
-//   - prompt 用 "Free OCR." 效果最好（忠实转录）
-//   - OCR 模型不听从 JSON 输出指令，因此采用两步法：先转录文本，再由 ParseOCRText 解析
-type DeepSeekProvider struct {
+// 支持硅基流动等平台上的多种模型，按 model 名自动选择合适的 prompt：
+//   - DeepSeek-OCR 系列：用 "Free OCR."（OCR 专用指令）
+//   - Qwen-VL / 其他通用视觉模型：用结构化识别 prompt
+//
+// 经实测：DeepSeek-OCR 对竖版/复杂教材图返回乱码，Qwen3-VL-32B 能稳定识别。
+type OpenAICompatProvider struct {
 	endpoint string // 形如 https://api.siliconflow.cn/v1
 	apiKey   string
-	model    string // 形如 deepseek-ai/DeepSeek-OCR
+	model    string // 形如 Qwen/Qwen3-VL-32B-Instruct
 	client   *http.Client
 }
 
-func NewDeepSeekProvider(endpoint, apiKey, model string) *DeepSeekProvider {
-	return &DeepSeekProvider{
+func NewDeepSeekProvider(endpoint, apiKey, model string) *OpenAICompatProvider {
+	return &OpenAICompatProvider{
 		endpoint: endpoint,
 		apiKey:   apiKey,
 		model:    model,
-		client:   &http.Client{Timeout: 180 * time.Second}, // OCR 较慢
+		client:   &http.Client{Timeout: 180 * time.Second},
 	}
 }
 
-func (p *DeepSeekProvider) Name() string { return "deepseek" }
+func (p *OpenAICompatProvider) Name() string { return "deepseek" }
 
-func (p *DeepSeekProvider) Recognize(ctx context.Context, image []byte, mimeType string) (*Result, error) {
+// promptForModel 按 model 名返回合适的识别 prompt。
+// DeepSeek-OCR 专用 "Free OCR."；通用视觉模型用结构化识别指令。
+func (p *OpenAICompatProvider) promptForModel() string {
+	m := strings.ToLower(p.model)
+	if strings.Contains(m, "deepseek-ocr") {
+		return "Free OCR."
+	}
+	// Qwen-VL 等通用视觉模型：用明确指令，要求逐行列出
+	return "识别这张图片里的英语单词、音标和中文释义，逐行列出。只输出识别到的文字内容，不要额外解释。"
+}
+
+func (p *OpenAICompatProvider) Recognize(ctx context.Context, image []byte, mimeType string) (*Result, error) {
 	if p.apiKey == "" {
-		return nil, fmt.Errorf("OCR 未配置 apiKey，请在 data/config.yaml 的 ocr.apiKey 填入硅基流动 API Key")
+		return nil, fmt.Errorf("OCR 未配置 apiKey，请在 data/config.yaml 的 ocr.apiKey 填入 API Key")
 	}
 	if p.endpoint == "" || p.model == "" {
 		return nil, fmt.Errorf("OCR 配置不完整：endpoint=%q model=%q", p.endpoint, p.model)
@@ -49,7 +61,6 @@ func (p *DeepSeekProvider) Recognize(ctx context.Context, image []byte, mimeType
 		return nil, err
 	}
 	rows := ParseOCRText(raw)
-	// 确保每行有默认 wordType 与 confidence
 	for i := range rows {
 		if rows[i].WordType == "" {
 			rows[i].WordType = "new"
@@ -62,7 +73,7 @@ func (p *DeepSeekProvider) Recognize(ctx context.Context, image []byte, mimeType
 }
 
 // callOCR 调 OpenAI 兼容的 chat/completions，返回识别出的文本。
-func (p *DeepSeekProvider) callOCR(ctx context.Context, image []byte, mimeType string) (string, error) {
+func (p *OpenAICompatProvider) callOCR(ctx context.Context, image []byte, mimeType string) (string, error) {
 	dataURL := fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(image))
 
 	payload := map[string]any{
@@ -71,7 +82,7 @@ func (p *DeepSeekProvider) callOCR(ctx context.Context, image []byte, mimeType s
 			{
 				"role": "user",
 				"content": []map[string]any{
-					{"type": "text", "text": "Free OCR."},
+					{"type": "text", "text": p.promptForModel()},
 					{"type": "image_url", "image_url": map[string]string{"url": dataURL}},
 				},
 			},
@@ -106,7 +117,6 @@ func (p *DeepSeekProvider) callOCR(ctx context.Context, image []byte, mimeType s
 		return "", fmt.Errorf("OCR API 返回 %d: %s", resp.StatusCode, truncate(string(respBody), 300))
 	}
 
-	// 解析 OpenAI 格式响应
 	var oai openAIResponse
 	if err := json.Unmarshal(respBody, &oai); err != nil {
 		return "", fmt.Errorf("decode OCR response: %w", err)

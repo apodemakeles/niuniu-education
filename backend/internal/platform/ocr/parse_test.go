@@ -1,8 +1,83 @@
 package ocr
 
 import (
+	"strings"
 	"testing"
 )
+
+func TestParseQwen3VLOutput(t *testing.T) {
+	// Qwen3-VL-32B-Instruct 对教材截图的真实输出（来自实测）。
+	// 格式：单词(可多词) 音标 中文 p.页码，部分行带 * 标记、Unit 标题。
+	raw := `fire station /ˈfaɪər ˌsteɪʃən/ 消防站 p. 30
+factory /ˈfæktri/ 工厂 p. 30
+farm /fɑːm/ 农场；牧场；饲养场 p. 30
+hospital /ˈhɒspɪt(ə)l/ 医院 p. 30
+Ms /mɪz/ （用于女子的姓氏或姓名前，不指明婚否）女士 p. 28
+* its /ɪts/ 它的 p. 44
+* their /ðeə(r)/ 他们的 p. 44
+mine /maɪn/ 我的 p. 44
+Unit 4`
+	rows := ParseOCRText(raw)
+
+	// 应识别出有效单词行（Unit 4 这种纯标题行无中文释义，应被过滤或标记）
+	texts := map[string]DraftRow{}
+	for _, r := range rows {
+		if r.Text != "" {
+			texts[r.Text] = r
+		}
+	}
+
+	// 核心断言：关键单词的音标和中文正确
+	if r, ok := texts["factory"]; !ok {
+		t.Errorf("未识别出 factory")
+	} else {
+		if r.MeaningZh != "工厂" {
+			t.Errorf("factory 释义: got %q, want 工厂", r.MeaningZh)
+		}
+		if r.Phonetic != "/ˈfæktri/" {
+			t.Errorf("factory 音标: got %q, want /ˈfæktri/", r.Phonetic)
+		}
+	}
+
+	// 多词英文：fire station
+	if r, ok := texts["fire station"]; !ok {
+		t.Errorf("未识别出 fire station（多词英文）")
+	} else if r.MeaningZh != "消防站" {
+		t.Errorf("fire station 释义: got %q, want 消防站", r.MeaningZh)
+	}
+
+	// 带 * 标记的行应被剥离星号
+	if _, ok := texts["its"]; !ok {
+		t.Errorf("未识别出 its（应剥离行首 * 标记）")
+	}
+
+	// 页码 p. 30 不应出现在释义里
+	if r, ok := texts["farm"]; ok {
+		if strings.Contains(r.MeaningZh, "p.") || strings.Contains(r.MeaningZh, "30") {
+			t.Errorf("farm 释义不应含页码: got %q", r.MeaningZh)
+		}
+	}
+}
+
+func TestPromptForModel(t *testing.T) {
+	cases := []struct {
+		model    string
+		wantFree bool // true=期望 "Free OCR."（DeepSeek-OCR）
+	}{
+		{"deepseek-ai/DeepSeek-OCR", true},
+		{"deepseek-ai/DeepSeek-OCR-2", true},
+		{"Qwen/Qwen3-VL-32B-Instruct", false},
+		{"PaddlePaddle/PaddleOCR-VL-1.5", false},
+	}
+	for _, c := range cases {
+		p := &OpenAICompatProvider{model: c.model}
+		got := p.promptForModel()
+		isFree := got == "Free OCR."
+		if isFree != c.wantFree {
+			t.Errorf("model=%q: prompt=%q, wantFree=%v", c.model, got, c.wantFree)
+		}
+	}
+}
 
 func TestParseRealDeepSeekOutput(t *testing.T) {
 	// 真实 DeepSeek-OCR 对 /tmp/wordlist_test.png 的输出：缩进续行结构。

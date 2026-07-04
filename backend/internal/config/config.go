@@ -78,9 +78,10 @@ func Default() Config {
 		OCR: OCRConfig{
 			Provider: "deepseek",
 			Endpoint: "https://api.siliconflow.cn/v1",
-			Model:    "deepseek-ai/DeepSeek-OCR",
-			// APIKey 留空：用户需在 data/config.yaml 填入硅基流动 API Key。
-			// 未填时调用 OCR 会返回明确错误，不影响启动。
+			// 默认用 Qwen3-VL-32B：实测对竖版/复杂教材图识别更稳定。
+			// DeepSeek-OCR 对部分图片返回乱码，已降级为备选。
+			// 可在 data/config.yaml 改回 deepseek-ai/DeepSeek-OCR 或其他硅基流动视觉模型。
+			Model:  "Qwen/Qwen3-VL-32B-Instruct",
 			APIKey: "",
 		},
 		OpenBrowser: true,
