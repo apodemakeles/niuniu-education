@@ -65,7 +65,12 @@ func Default() Config {
 			BusyTimeout: 5000,
 		},
 		OCR: OCRConfig{
-			Provider: "mock",
+			Provider: "deepseek",
+			Endpoint: "https://api.siliconflow.cn/v1",
+			Model:    "deepseek-ai/DeepSeek-OCR",
+			// APIKey 留空：用户需在 data/config.yaml 填入硅基流动 API Key。
+			// 未填时调用 OCR 会返回明确错误，不影响启动。
+			APIKey: "",
 		},
 		OpenBrowser: true,
 	}
@@ -127,6 +132,12 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("NIUNIU_OCR_API_KEY"); v != "" {
 		cfg.OCR.APIKey = v
+	}
+	if v := os.Getenv("NIUNIU_OCR_ENDPOINT"); v != "" {
+		cfg.OCR.Endpoint = v
+	}
+	if v := os.Getenv("NIUNIU_OCR_MODEL"); v != "" {
+		cfg.OCR.Model = v
 	}
 }
 

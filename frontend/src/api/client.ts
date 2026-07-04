@@ -13,8 +13,9 @@ export class ApiError extends Error {
   }
 }
 
-interface ApiOptions extends RequestInit {
+interface ApiOptions extends Omit<RequestInit, 'headers'> {
   query?: Record<string, string | number | undefined>
+  headers?: Record<string, string>
 }
 
 function buildUrl(path: string, query?: ApiOptions['query']): string {
@@ -30,10 +31,16 @@ function buildUrl(path: string, query?: ApiOptions['query']): string {
 
 export async function request<T>(path: string, opts: ApiOptions = {}): Promise<T> {
   const { query, headers, ...rest } = opts
+  // FormData 时让浏览器自动设置 Content-Type（含 boundary），不手动覆盖
+  const isFormData = rest.body instanceof FormData
+  const finalHeaders: Record<string, string> = { ...headers }
+  if (!isFormData) {
+    finalHeaders['Content-Type'] = 'application/json'
+  }
   let res: Response
   try {
     res = await fetch(buildUrl(path, query), {
-      headers: { 'Content-Type': 'application/json', ...headers },
+      headers: finalHeaders,
       ...rest,
     })
   } catch (e) {

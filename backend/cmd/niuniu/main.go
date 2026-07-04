@@ -14,7 +14,9 @@ import (
 	"time"
 
 	"github.com/apodemakeles/niuniu-education/backend/internal/config"
+	"github.com/apodemakeles/niuniu-education/backend/internal/module/wordlibrary"
 	"github.com/apodemakeles/niuniu-education/backend/internal/platform/fs"
+	"github.com/apodemakeles/niuniu-education/backend/internal/platform/ocr"
 	"github.com/apodemakeles/niuniu-education/backend/internal/platform/storage"
 	"github.com/apodemakeles/niuniu-education/backend/internal/server"
 	"github.com/apodemakeles/niuniu-education/backend/internal/version"
@@ -81,13 +83,27 @@ func run() error {
 	}
 	defer db.Close()
 
-	// 4. HTTP 服务
-	srv := server.New(cfg, logger)
+	// 4. OCR Provider（mock 离线可用；deepseek 需要 apiKey，缺失时调用报错不阻塞启动）
+	ocrProvider, err := ocr.New(cfg.OCR)
+	if err != nil {
+		return fmt.Errorf("init ocr provider: %w", err)
+	}
+	logger.Info("OCR provider 就绪", slog.String("provider", ocrProvider.Name()))
+
+	// 5. 业务模块装配
+	store := wordlibrary.NewStore(db)
+	svc := wordlibrary.NewService(store, ocrProvider, logger)
+	wlHandler := wordlibrary.NewHandler(svc, store, db, cfg, logger)
+
+	// 6. HTTP 服务
+	srv := server.New(cfg, logger, func(r server.SubRouter) {
+		wlHandler.Register(r)
+	})
 	httpSrv := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port),
 		Handler:      srv.Router(),
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 60 * time.Second, // OCR/导出可能稍慢
+		WriteTimeout: 180 * time.Second, // OCR 较慢
 		IdleTimeout:  120 * time.Second,
 	}
 

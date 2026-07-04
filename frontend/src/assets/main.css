@@ -177,3 +177,278 @@ td {
   background: #f8e1d4;
   border: 1px solid #efc49d;
 }
+
+/* 按钮 */
+.primary-btn,
+.secondary-btn,
+.ghost-btn {
+  min-height: 38px;
+  border: 1px solid var(--green);
+  font-weight: 700;
+  padding: 0 16px;
+}
+
+.primary-btn {
+  color: white;
+  background: var(--green);
+}
+
+.primary-btn:hover {
+  background: var(--green-dark);
+}
+
+.primary-btn:disabled,
+.secondary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.secondary-btn {
+  color: var(--green-dark);
+  background: var(--panel);
+}
+
+.secondary-btn:hover {
+  background: #ecf1e7;
+}
+
+.link-btn {
+  padding: 0;
+  color: var(--blue);
+  background: transparent;
+  border: 0;
+  font-weight: 800;
+}
+
+/* 面板与头部 */
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+/* 统计卡 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 8px 0 16px;
+}
+
+.stats-grid div {
+  padding: 14px;
+  background: #f4f7ef;
+  border: 1px solid var(--line);
+}
+
+.stats-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stats-grid strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 24px;
+}
+
+/* 操作条与工具栏 */
+.action-strip,
+.table-toolbar,
+.form-actions,
+.draft-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.table-toolbar {
+  justify-content: flex-end;
+  margin: 16px 0 10px;
+}
+
+.form-actions,
+.draft-actions {
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+select,
+input,
+textarea {
+  min-height: 38px;
+  padding: 0 11px;
+  color: var(--ink);
+  background: white;
+  border: 1px solid var(--line);
+}
+
+/* 分类卡 */
+.library-list {
+  display: grid;
+  gap: 10px;
+}
+
+.library-card {
+  width: 100%;
+  padding: 14px;
+  color: var(--ink);
+  background: white;
+  border: 1px solid var(--line);
+  text-align: left;
+}
+
+.library-card.active {
+  border-color: var(--green);
+  box-shadow: inset 4px 0 0 var(--green);
+}
+
+.library-card strong {
+  display: block;
+  margin-bottom: 7px;
+}
+
+.library-card span {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* 弹窗 */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(23, 32, 28, 0.44);
+  z-index: 20;
+}
+
+.modal {
+  position: relative;
+  width: min(920px, 100%);
+  max-height: min(90vh, 820px);
+  overflow: auto;
+  padding: 22px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
+}
+
+.close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  background: white;
+  border: 1px solid var(--line);
+  font-size: 22px;
+  line-height: 1;
+}
+
+.modal-title {
+  margin-bottom: 16px;
+  padding-right: 42px;
+}
+
+.modal-title p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* 拍照导入 */
+.draft-grid {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.photo-preview {
+  display: grid;
+  min-height: 200px;
+  place-items: center;
+  padding: 16px;
+  color: var(--muted);
+  background: #eef3ec;
+  border: 1px dashed var(--green);
+  text-align: center;
+}
+
+.photo-preview img {
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+}
+
+/* 草稿表 */
+.draft-note {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  color: #6b3a23;
+  background: #fbebd7;
+  border: 1px solid #efc49d;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.draft-table input,
+.draft-table select {
+  width: 100%;
+  min-width: 90px;
+}
+
+.draft-table tr.flagged {
+  background: #fff7f0;
+}
+
+.issue-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  color: #8d3d1f;
+  background: #f8e1d4;
+  border: 1px solid #efc49d;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  max-width: 360px;
+  padding: 14px 16px;
+  color: white;
+  background: #173d2d;
+  z-index: 30;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: all 0.22s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  transform: translateY(20px);
+  opacity: 0;
+}
+
+/* 响应式 */
+@media (max-width: 980px) {
+  .library-layout,
+  .draft-grid {
+    grid-template-columns: 1fr;
+  }
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

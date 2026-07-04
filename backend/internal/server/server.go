@@ -12,17 +12,26 @@ import (
 	"github.com/go-chi/cors"
 )
 
-// Server 持有 HTTP 服务所需依赖。M0 仅含健康检查与临时单词列表用于联调。
+// SubRouter 是业务模块挂载路由用的最小接口（Get/Post）。
+// chi.Router 天然满足该接口，wordlibrary.Handler.Register 接收同名接口。
+type SubRouter interface {
+	Get(pattern string, h http.HandlerFunc)
+	Post(pattern string, h http.HandlerFunc)
+}
+
+// Server 负责 HTTP 路由装配。业务路由由各模块 Handler 自行注册。
 type Server struct {
 	cfg    *config.Config
 	logger *slog.Logger
+	// routeRegistrar 让 main 注入业务模块的路由注册函数
+	routeRegistrar func(SubRouter)
 }
 
-func New(cfg *config.Config, logger *slog.Logger) *Server {
-	return &Server{cfg: cfg, logger: logger}
+func New(cfg *config.Config, logger *slog.Logger, registrar func(SubRouter)) *Server {
+	return &Server{cfg: cfg, logger: logger, routeRegistrar: registrar}
 }
 
-// Router 装配全部路由与中间件。
+// Router 装配全部中间件与路由。
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
 
@@ -37,8 +46,10 @@ func (s *Server) Router() http.Handler {
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/health", s.handleHealth)
-		// 临时联调端点：返回预置单词，前端 M0 即可看到首屏数据。
-		r.Get("/words", s.handleListWords)
+		// 业务模块（wordlibrary 等）的路由挂载由 main 注入
+		if s.routeRegistrar != nil {
+			s.routeRegistrar(r)
+		}
 	})
 
 	r.NotFound(s.handleNotFound)
@@ -56,47 +67,11 @@ func (s *Server) corsMiddleware() func(http.Handler) http.Handler {
 	})
 }
 
-// --- handlers ---
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-type errorBody struct {
-	Error struct {
-		Code    string `json:"code"`
-		Message string `json:"message"`
-	} `json:"error"`
-}
-
-func writeError(w http.ResponseWriter, status int, code, msg string) {
-	b := errorBody{}
-	b.Error.Code = code
-	b.Error.Message = msg
-	writeJSON(w, status, b)
-}
-
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":  "ok",
 		"version": version.Version,
 	})
-}
-
-// TODO(M1): 由 wordlibrary 模块接管，下面为 M0 联调用临时实现。
-func (s *Server) handleListWords(w http.ResponseWriter, r *http.Request) {
-	// 复刻原型 app.js 中的示例数据
-	words := []map[string]any{
-		{"id": "w-1", "text": "apple", "meaningZh": "苹果", "phonetic": "/ˈæpl/", "wordType": "new", "status": "unlearned"},
-		{"id": "w-2", "text": "read", "meaningZh": "阅读", "phonetic": "/riːd/", "wordType": "mistake", "status": "reinforce"},
-		{"id": "w-3", "text": "desk", "meaningZh": "书桌", "phonetic": "/desk/", "wordType": "new", "status": "learning"},
-		{"id": "w-4", "text": "climb", "meaningZh": "攀爬", "phonetic": "/klaɪm/", "wordType": "mistake", "status": "reinforce"},
-		{"id": "w-5", "text": "water", "meaningZh": "水", "phonetic": "/ˈwɔːtər/", "wordType": "new", "status": "mastered"},
-		{"id": "w-6", "text": "their", "meaningZh": "他们的", "phonetic": "/ðer/", "wordType": "mistake", "status": "reinforce"},
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"data": words})
 }
 
 func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
@@ -105,4 +80,20 @@ func (s *Server) handleNotFound(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleMethodNotAllowed(w http.ResponseWriter, r *http.Request) {
 	writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "请求方法不被允许")
+}
+
+// --- 响应工具 ---
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeError(w http.ResponseWriter, status int, code, msg string) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]any{"code": code, "message": msg},
+	})
 }
