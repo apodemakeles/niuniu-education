@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>家长端单词库管理原型</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Parent Word Library</p>
+            <h1 id="pageTitle">单词库管理</h1>
+          </div>
+          <div class="top-actions">
+            <button class="ghost-btn" id="exportBtn" type="button">导出</button>
+          </div>
+        </header>
+
+        <section class="view active" id="librariesView">
+          <div class="library-layout">
+            <section class="panel library-panel">
+              <div class="panel-head">
+                <div>
+                  <h2>分类</h2>
+                </div>
+              </div>
+              <div class="library-list" id="categoryList"></div>
+            </section>
+
+            <section class="panel detail-panel">
+              <div class="stats-grid">
+                <div>
+                  <span>总词数</span>
+                  <strong id="totalWords">0</strong>
+                </div>
+                <div>
+                  <span>新词</span>
+                  <strong id="newWords">0</strong>
+                </div>
+                <div>
+                  <span>易错词</span>
+                  <strong id="mistakeWords">0</strong>
+                </div>
+              </div>
+
+              <div class="action-strip">
+                <button class="primary-btn" id="manualAddBtn" type="button">逐个录入</button>
+                <button class="secondary-btn" id="pasteImportBtn" type="button">粘贴导入</button>
+                <button class="secondary-btn" id="photoImportBtn" type="button">拍照导入</button>
+              </div>
+
+              <div class="table-toolbar">
+                <input id="wordSearch" type="search" placeholder="搜索单词、中文、音标" />
+                <select id="wordStatusFilter" aria-label="单词状态筛选">
+                  <option value="all">全部状态</option>
+                  <option value="unlearned">未学</option>
+                  <option value="learning">学习中</option>
+                  <option value="reinforce">需强化</option>
+                  <option value="mastered">已掌握</option>
+                </select>
+              </div>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>英文单词</th>
+                      <th>中文</th>
+                      <th>音标</th>
+                      <th>类型</th>
+                      <th>状态</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="wordTable"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="modalBackdrop" hidden>
+      <section class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+        <button class="close-btn" id="closeModalBtn" type="button" aria-label="关闭">×</button>
+        <div id="modalContent"></div>
+      </section>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
