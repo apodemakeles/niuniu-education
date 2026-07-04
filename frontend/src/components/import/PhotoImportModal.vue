@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { recognizeImage } from '@/api/import'
+import { ref, onUnmounted } from 'vue'
+import { recognizeImageStream } from '@/api/import'
 import type { DraftRow, ImportResult } from '@/types/draft'
 import DraftTable from './DraftTable.vue'
 
@@ -13,8 +13,9 @@ const stage = ref<'select' | 'recognizing' | 'draft'>('select')
 const previewUrl = ref<string | null>(null)
 const error = ref<string | null>(null)
 const rows = ref<DraftRow[]>([])
-
+const stageText = ref('') // 实时进度文字
 let selectedFile: File | null = null
+let abortController: AbortController | null = null
 
 function onPick(event: Event) {
   const input = event.target as HTMLInputElement
@@ -25,21 +26,35 @@ function onPick(event: Event) {
   error.value = null
 }
 
-async function onRecognize() {
+function onRecognize() {
   if (!selectedFile) {
     error.value = '请先选择图片'
     return
   }
   stage.value = 'recognizing'
   error.value = null
-  try {
-    const res = await recognizeImage(selectedFile)
-    rows.value = res.rows
-    stage.value = 'draft'
-  } catch (e) {
-    error.value = (e as Error).message
-    stage.value = 'select'
-  }
+  rows.value = []
+  stageText.value = '正在上传图片…'
+
+  abortController = recognizeImageStream(selectedFile, {
+    onStage: (s) => {
+      if (s === 'recognizing') stageText.value = '正在识别文字…'
+    },
+    onRow: (row) => {
+      // 增量词行实时出现
+      stageText.value = `已识别 ${rows.value.length + 1} 个词…`
+      rows.value.push(row)
+    },
+    onFinal: (result) => {
+      // 用最终完整解析结果替换预览（含 issues 标记等）
+      rows.value = result.rows
+      stage.value = 'draft'
+    },
+    onError: (msg) => {
+      error.value = msg
+      stage.value = 'select'
+    },
+  })
 }
 
 function onConfirmed(result: ImportResult) {
@@ -47,8 +62,17 @@ function onConfirmed(result: ImportResult) {
 }
 
 function close() {
+  // 关闭时取消进行中的流
+  if (abortController) {
+    abortController.abort()
+    abortController = null
+  }
   emit('closed')
 }
+
+onUnmounted(() => {
+  if (abortController) abortController.abort()
+})
 </script>
 
 <template>
@@ -78,10 +102,32 @@ function close() {
         </div>
       </div>
 
-      <!-- 阶段2：识别中 -->
-      <div v-else-if="stage === 'recognizing'" class="modal-title">
-        <h2>正在识别…</h2>
-        <p class="note">OCR 识别可能需要十几秒，请稍候。</p>
+      <!-- 阶段2：识别中（实时进度 + 词行滚动出现） -->
+      <div v-else-if="stage === 'recognizing'" class="recognizing-wrap">
+        <div class="modal-title">
+          <h2>{{ stageText || '正在识别…' }}</h2>
+          <p class="note">识别结果会实时显示在下方，完成后可编辑确认。</p>
+        </div>
+        <div v-if="rows.length > 0" class="stream-preview">
+          <div class="table-wrap">
+            <table class="draft-table">
+              <thead>
+                <tr>
+                  <th>英文单词</th>
+                  <th>中文</th>
+                  <th>音标</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="r in rows" :key="r.rowId">
+                  <td><strong>{{ r.text }}</strong></td>
+                  <td>{{ r.meaningZh }}</td>
+                  <td>{{ r.phonetic }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <!-- 阶段3：草稿预览与确认 -->

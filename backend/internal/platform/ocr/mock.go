@@ -1,6 +1,9 @@
 package ocr
 
-import "context"
+import (
+	"context"
+	"strings"
+)
 
 // MockProvider 是离线兜底实现，复刻原型 app.js 的 mock 数据。
 //
@@ -21,4 +24,21 @@ func (m *MockProvider) Recognize(_ context.Context, _ []byte, _ string) (*Result
 		},
 		RawText: "[mock OCR] 这是由 MockProvider 返回的示例数据。\nclirnb /klaɪm/ 攀爬\nwindow /ˈwɪndoʊ/ 窗户\nchair /tʃer/ 椅子",
 	}, nil
+}
+
+// RecognizeStream 模拟流式：把 mock 文本按行分段通过 onDelta 回调推送。
+func (m *MockProvider) RecognizeStream(_ context.Context, _ []byte, _ string, onDelta func(text string)) (string, error) {
+	lines := []string{
+		"clirnb /klaɪm/ 攀爬\n",
+		"window /ˈwɪndoʊ/ 窗户\n",
+		"chair /tʃer/ 椅子",
+	}
+	var full strings.Builder
+	for _, l := range lines {
+		full.WriteString(l)
+		if onDelta != nil {
+			onDelta(l)
+		}
+	}
+	return full.String(), nil
 }

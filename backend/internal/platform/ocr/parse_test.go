@@ -5,6 +5,44 @@ import (
 	"testing"
 )
 
+func TestParseFilterTitle(t *testing.T) {
+	// Unit 4 / Lesson 5 这类标题行不应被识别为单词
+	raw := "fire station /ˈfaɪər/ 消防站\nUnit 4\nfactory /ˈfæktri/ 工厂\nLesson 5"
+	rows := ParseOCRText(raw)
+	for _, r := range rows {
+		if strings.Contains(strings.ToLower(r.Text), "unit") || strings.Contains(strings.ToLower(r.Text), "lesson") {
+			t.Errorf("标题行被误识别为单词: %+v", r)
+		}
+	}
+	// 应只有 2 个有效单词
+	valid := 0
+	for _, r := range rows {
+		if r.Text != "" && (r.MeaningZh != "" || r.Phonetic != "") {
+			valid++
+		}
+	}
+	if valid < 2 {
+		t.Errorf("有效单词数 %d, want >= 2", valid)
+	}
+}
+
+func TestIsLikelyTitle(t *testing.T) {
+	cases := map[string]bool{
+		"Unit 4":   true,
+		"Unit4":    true,
+		"Lesson 5": true,
+		"Chapter 3": true,
+		"apple":    false,
+		"factory":  false,
+		"Unit 4 词汇": false, // 含中文，不是纯标题
+	}
+	for in, want := range cases {
+		if got := isLikelyTitle(in); got != want {
+			t.Errorf("isLikelyTitle(%q)=%v, want %v", in, got, want)
+		}
+	}
+}
+
 func TestParseQwen3VLOutput(t *testing.T) {
 	// Qwen3-VL-32B-Instruct 对教材截图的真实输出（来自实测）。
 	// 格式：单词(可多词) 音标 中文 p.页码，部分行带 * 标记、Unit 标题。

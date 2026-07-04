@@ -27,7 +27,10 @@ type Result struct {
 type Provider interface {
 	// Name 返回 provider 标识（mock / siliconflow / ...），用于记录与排查。
 	Name() string
-	// Recognize 对图片字节执行识别，返回结构化草稿。
+	// Recognize 对图片字节执行识别，返回结构化草稿（非流式）。
 	// image 为原始字节，mimeType 形如 "image/png"。
 	Recognize(ctx context.Context, image []byte, mimeType string) (*Result, error)
+	// RecognizeStream 流式识别，每收到一段文本增量就调 onDelta。
+	// 返回完整 rawText。用于 SSE 流式响应场景。
+	RecognizeStream(ctx context.Context, image []byte, mimeType string, onDelta func(text string)) (string, error)
 }

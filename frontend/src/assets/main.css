@@ -363,6 +363,14 @@ textarea {
 }
 
 /* 拍照导入 */
+.recognizing-wrap {
+  min-height: 200px;
+}
+
+.stream-preview {
+  margin-top: 12px;
+}
+
 .draft-grid {
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);

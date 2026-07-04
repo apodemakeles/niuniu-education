@@ -3,6 +3,7 @@ package wordlibrary
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/apodemakeles/niuniu-education/backend/internal/config"
 	"github.com/apodemakeles/niuniu-education/backend/internal/platform/fs"
+	"github.com/apodemakeles/niuniu-education/backend/internal/platform/ocr"
 )
 
 const (
@@ -45,6 +47,7 @@ func (h *Handler) Register(r Router) {
 	r.Delete("/words/{id}", h.handleDeleteWord)
 	r.Post("/imports/parse", h.handleImportParse)
 	r.Post("/imports/ocr", h.handleImportOCR)
+	r.Post("/imports/ocr/stream", h.handleImportOCRStream)
 	r.Post("/imports/confirm", h.handleConfirmImport)
 	r.Post("/exports/dictation:preview", h.handleExportPreview)
 	r.Post("/exports/dictation", h.handleExportDoc)
@@ -353,4 +356,122 @@ func writeError(w http.ResponseWriter, status int, code, msg string) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"error": map[string]any{"code": code, "message": msg},
 	})
+}
+
+// writeSSE 写一个 SSE 事件并立即 flush，让浏览器实时收到。
+func writeSSE(w http.ResponseWriter, eventName string, data any) {
+	jsonBytes, _ := json.Marshal(data)
+	// SSE 格式：event: <name>\ndata: <json>\n\n
+	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventName, jsonBytes)
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// handleImportOCRStream 流式 OCR：SSE 推送进度阶段 + 增量词行 + 最终结果。
+func (h *Handler) handleImportOCRStream(w http.ResponseWriter, r *http.Request) {
+	// 设置 SSE 头
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no") // 禁用 nginx 缓冲（如经反代）
+
+	// 接收图片（复用 multipart 逻辑）
+	if err := r.ParseMultipartForm(maxImageSize); err != nil {
+		writeSSE(w, "error", map[string]string{"message": "解析表单失败，请确认上传的是图片文件"})
+		return
+	}
+	file, header, err := r.FormFile("image")
+	if err != nil {
+		writeSSE(w, "error", map[string]string{"message": "缺少 image 字段"})
+		return
+	}
+	defer file.Close()
+
+	mimeType := header.Header.Get("Content-Type")
+	if mimeType == "" {
+		mimeType = sniffImageType(header.Filename)
+	}
+	if !strings.HasPrefix(mimeType, "image/") {
+		writeSSE(w, "error", map[string]string{"message": "仅支持图片文件"})
+		return
+	}
+	imageBytes, err := io.ReadAll(io.LimitReader(file, maxImageSize+1))
+	if err != nil {
+		writeSSE(w, "error", map[string]string{"message": "读取图片失败"})
+		return
+	}
+	if len(imageBytes) > maxImageSize {
+		writeSSE(w, "error", map[string]string{"message": "图片不能超过 10MB"})
+		return
+	}
+
+	// 阶段事件：已上传 → 正在识别
+	writeSSE(w, "stage", map[string]string{"stage": "recognizing"})
+
+	// 流式识别：累积原始文本，每遇换行尝试增量解析推送 row
+	var rawText strings.Builder
+	var pendingLine strings.Builder
+
+	onDelta := func(delta string) {
+		rawText.WriteString(delta)
+		pendingLine.WriteString(delta)
+		// 遇到换行：尝试解析这一行为词行并推送
+		if strings.Contains(delta, "\n") {
+			line := pendingLine.String()
+			pendingLine.Reset()
+			// 可能一次 delta 含多行，取最后一个换行后的残留留作 pending
+			if idx := strings.LastIndex(line, "\n"); idx >= 0 {
+				complete := line[:idx]
+				rest := line[idx+1:]
+				pendingLine.WriteString(rest)
+				// 对完整的行（可能含多个\n）逐行解析
+				for _, l := range strings.Split(complete, "\n") {
+					pushRowFromLine(w, l)
+				}
+			}
+		}
+	}
+
+	_, err = h.svc.ocr.RecognizeStream(r.Context(), imageBytes, mimeType, onDelta)
+	if err != nil {
+		writeSSE(w, "error", map[string]string{"message": err.Error()})
+		h.logger.Error("ocr stream", slog.Any("err", err))
+		return
+	}
+
+	// 处理残留的最后一行
+	if pendingLine.Len() > 0 {
+		pushRowFromLine(w, pendingLine.String())
+	}
+
+	// 最终完整解析（含跨行策略：表格/续行合并），推送 final 替换预览
+	rows := ocr.ParseOCRText(rawText.String())
+	dtoRows := fromOCRDraft(rows)
+	imageID := h.saveImageRecord(r, imageBytes, mimeType, rawText.String())
+
+	writeSSE(w, "final", map[string]any{
+		"imageId": imageID,
+		"rows":    dtoRows,
+		"total":   len(dtoRows),
+	})
+}
+
+// pushRowFromLine 尝试把单行解析为词行并推送 row 事件（增量预览）。
+func pushRowFromLine(w http.ResponseWriter, line string) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return
+	}
+	row, ok := ocr.ParseLineIncrement(line)
+	if !ok || row.Text == "" {
+		return
+	}
+	if row.WordType == "" {
+		row.WordType = "new"
+	}
+	if row.Confidence == 0 {
+		row.Confidence = 1.0
+	}
+	writeSSE(w, "row", row)
 }

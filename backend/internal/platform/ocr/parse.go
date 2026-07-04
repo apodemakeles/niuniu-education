@@ -25,6 +25,15 @@ func ParseOCRText(raw string) []DraftRow {
 	// 清理 OCR 常见前缀噪音，如 ".# Title"、"# Title"
 	lines := cleanLines(strings.Split(raw, "\n"))
 
+	// 过滤教材标题行（Unit 4 / Lesson 5 等），它们不是单词
+	filtered := lines[:0]
+	for _, l := range lines {
+		if !isLikelyTitle(l) {
+			filtered = append(filtered, l)
+		}
+	}
+	lines = filtered
+
 	if rows, ok := tryParseTable(lines); ok {
 		return rows
 	}
@@ -225,6 +234,11 @@ func parseMixedLine(l string) (DraftRow, bool) {
 	l = pageSuffixRe.ReplaceAllString(l, "") // 去掉行尾页码 p. 30
 	l = strings.TrimSpace(l)
 
+	// 过滤教材标题行（Unit 4 / Lesson 5 / Chapter 3 等），它们不是单词
+	if isLikelyTitle(l) {
+		return DraftRow{}, false
+	}
+
 	// 找第一段 CJK（中文释义）的起始位置
 	cjkStart := indexOfFirstCJK(l)
 	if cjkStart < 0 {
@@ -348,4 +362,23 @@ func splitTextAndPhonetic(s string) (text, phonetic string) {
 // stripLeadingIndex 去掉行首序号前缀，如 "1. "、"2) "、"3、 "。
 func stripLeadingIndex(s string) string {
 	return strings.TrimSpace(indexPrefixRe.ReplaceAllString(strings.TrimSpace(s), ""))
+}
+
+// titlePrefixRe 匹配教材标题前缀：Unit/Lesson/Chapter/Page + 数字。
+var titlePrefixRe = regexp.MustCompile(`(?i)^(unit|lesson|chapter|page|module|part)\s*\d+`)
+
+// isLikelyTitle 判断是否为教材标题行（如 "Unit 4"、"Lesson 5"）。
+// 仅当行首是标题关键词+数字、且整行无中文释义时才判定（避免误杀含释义的行）。
+func isLikelyTitle(l string) bool {
+	if containsCJK(l) {
+		return false // 含中文，可能是正常词条
+	}
+	return titlePrefixRe.MatchString(strings.TrimSpace(l))
+}
+
+// ParseLineIncrement 对单行做轻量增量解析（流式场景用）。
+// 与 parseMixedLine 逻辑一致，但不依赖跨行上下文（策略选择/续行合并）。
+// 流结束后应用 ParseOCRText 做完整解析以修正边界情况。
+func ParseLineIncrement(line string) (DraftRow, bool) {
+	return parseMixedLine(line)
 }
