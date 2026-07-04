@@ -185,9 +185,10 @@ func tryParseDelimited(lines []string) ([]DraftRow, bool) {
 			matched++
 		}
 	}
-	// 仅当大部分行（>50%）匹配时才认为分隔符策略成立，
-	// 否则可能是误判（如 "Unit 4" 这种偶发匹配），应让位给 mixed 策略。
-	if matched == 0 || len(lines) > 0 && matched*2 < len(lines) {
+	// 仅当过半数行（>50%）匹配时才认为分隔符策略成立，
+	// 否则可能是误判（如个别行偶发匹配），应让位给 mixed 策略。
+	// 注意用 <=：matched*2 <= len 表示不过半（含刚好一半）。
+	if matched == 0 || len(lines) > 0 && matched*2 <= len(lines) {
 		return nil, false
 	}
 	return rows, true

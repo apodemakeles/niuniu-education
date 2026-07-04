@@ -20,6 +20,7 @@ export default async function globalTeardown() {
     const state = JSON.parse(readFileSync(STATE_FILE, 'utf-8'));
     killPid(state.backendPid);
     killPid(state.frontendPid);
+    killPid(state.realBackendPid);
     // 给一点时间优雅退出
     await new Promise((r) => setTimeout(r, 500));
     // 兜底：SIGTERM 没杀掉的强杀
@@ -30,6 +31,11 @@ export default async function globalTeardown() {
     }
     try {
       if (state.frontendPid) process.kill(state.frontendPid, 'SIGKILL');
+    } catch {
+      /* noop */
+    }
+    try {
+      if (state.realBackendPid) process.kill(state.realBackendPid, 'SIGKILL');
     } catch {
       /* noop */
     }
