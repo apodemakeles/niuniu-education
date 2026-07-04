@@ -23,9 +23,15 @@ dev-frontend: ## 启动前端 vite dev server (5173，proxy 到后端 8787)
 run: ## 用构建产物启动后端（前端需另起静态服务或 vite dev）
 	./bin/niuniu-api -port 8787
 
-test: ## 运行测试
+test: ## 运行测试（后端 go test + 前端 vitest）
 	cd backend && go test ./...
-	cd frontend && npm run build
+	cd frontend && npm run test
+
+test-backend: ## 仅后端测试
+	cd backend && go test ./...
+
+test-frontend: ## 仅前端测试
+	cd frontend && npm run test
 
 clean: ## 清理构建产物与数据目录
 	rm -rf bin frontend/dist
