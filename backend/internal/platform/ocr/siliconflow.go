@@ -12,22 +12,23 @@ import (
 	"time"
 )
 
-// OpenAICompatProvider 通过 OpenAI 兼容接口调用视觉模型。
+// SiliconFlowProvider 通过 OpenAI 兼容接口调用硅基流动平台上的视觉模型。
 //
-// 支持硅基流动等平台上的多种模型，按 model 名自动选择合适的 prompt：
+// 平台上的模型统一用 OpenAI 兼容接口，按 model 名自动选择合适的 prompt：
 //   - DeepSeek-OCR 系列：用 "Free OCR."（OCR 专用指令）
 //   - Qwen-VL / 其他通用视觉模型：用结构化识别 prompt
 //
 // 经实测：DeepSeek-OCR 对竖版/复杂教材图返回乱码，Qwen3-VL-32B 能稳定识别。
-type OpenAICompatProvider struct {
+type SiliconFlowProvider struct {
 	endpoint string // 形如 https://api.siliconflow.cn/v1
 	apiKey   string
 	model    string // 形如 Qwen/Qwen3-VL-32B-Instruct
 	client   *http.Client
 }
 
-func NewDeepSeekProvider(endpoint, apiKey, model string) *OpenAICompatProvider {
-	return &OpenAICompatProvider{
+// NewSiliconFlowProvider 构造硅基流动 OCR provider。
+func NewSiliconFlowProvider(endpoint, apiKey, model string) *SiliconFlowProvider {
+	return &SiliconFlowProvider{
 		endpoint: endpoint,
 		apiKey:   apiKey,
 		model:    model,
@@ -35,11 +36,11 @@ func NewDeepSeekProvider(endpoint, apiKey, model string) *OpenAICompatProvider {
 	}
 }
 
-func (p *OpenAICompatProvider) Name() string { return "deepseek" }
+func (p *SiliconFlowProvider) Name() string { return "siliconflow" }
 
 // promptForModel 按 model 名返回合适的识别 prompt。
 // DeepSeek-OCR 专用 "Free OCR."；通用视觉模型用结构化识别指令。
-func (p *OpenAICompatProvider) promptForModel() string {
+func (p *SiliconFlowProvider) promptForModel() string {
 	m := strings.ToLower(p.model)
 	if strings.Contains(m, "deepseek-ocr") {
 		return "Free OCR."
@@ -48,7 +49,7 @@ func (p *OpenAICompatProvider) promptForModel() string {
 	return "识别这张图片里的英语单词、音标和中文释义，逐行列出。只输出识别到的文字内容，不要额外解释。"
 }
 
-func (p *OpenAICompatProvider) Recognize(ctx context.Context, image []byte, mimeType string) (*Result, error) {
+func (p *SiliconFlowProvider) Recognize(ctx context.Context, image []byte, mimeType string) (*Result, error) {
 	if p.apiKey == "" {
 		return nil, fmt.Errorf("OCR 未配置 apiKey，请在 data/config.yaml 的 ocr.apiKey 填入 API Key")
 	}
@@ -73,7 +74,7 @@ func (p *OpenAICompatProvider) Recognize(ctx context.Context, image []byte, mime
 }
 
 // callOCR 调 OpenAI 兼容的 chat/completions，返回识别出的文本。
-func (p *OpenAICompatProvider) callOCR(ctx context.Context, image []byte, mimeType string) (string, error) {
+func (p *SiliconFlowProvider) callOCR(ctx context.Context, image []byte, mimeType string) (string, error) {
 	dataURL := fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(image))
 
 	payload := map[string]any{

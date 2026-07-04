@@ -70,7 +70,7 @@ func TestPromptForModel(t *testing.T) {
 		{"PaddlePaddle/PaddleOCR-VL-1.5", false},
 	}
 	for _, c := range cases {
-		p := &OpenAICompatProvider{model: c.model}
+		p := &SiliconFlowProvider{model: c.model}
 		got := p.promptForModel()
 		isFree := got == "Free OCR."
 		if isFree != c.wantFree {

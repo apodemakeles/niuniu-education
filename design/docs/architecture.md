@@ -141,8 +141,8 @@ backend/
 │   │   ├── fs/                    # 数据目录管理（images/exports 读写）
 │   │   └── ocr/                   # OCR Provider 适配层
 │   │       ├── provider.go        # Provider 接口定义
-│   │       ├── mock.go            # MVP 默认 Mock 实现
-│   │       ├── siliconflow.go     # 预留：硅基流动(DeepSeek-VL/Qwen-VL)
+│   │       ├── mock.go            # 离线 Mock 实现
+│   │       ├── siliconflow.go     # 硅基流动 OpenAI 兼容接口(Qwen3-VL/DeepSeek-OCR 等)
 │   │       └── registry.go        # 按 config 选择 provider
 │   ├── module/
 │   │   └── wordlibrary/           # 单词库业务模块

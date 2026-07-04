@@ -76,11 +76,11 @@ func Default() Config {
 			BusyTimeout: 5000,
 		},
 		OCR: OCRConfig{
-			Provider: "deepseek",
+			Provider: "siliconflow",
 			Endpoint: "https://api.siliconflow.cn/v1",
 			// 默认用 Qwen3-VL-32B：实测对竖版/复杂教材图识别更稳定。
 			// DeepSeek-OCR 对部分图片返回乱码，已降级为备选。
-			// 可在 data/config.yaml 改回 deepseek-ai/DeepSeek-OCR 或其他硅基流动视觉模型。
+			// 可在 data/config.yaml 改 model 为其他硅基流动视觉模型。
 			Model:  "Qwen/Qwen3-VL-32B-Instruct",
 			APIKey: "",
 		},
