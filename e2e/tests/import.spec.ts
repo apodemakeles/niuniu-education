@@ -39,6 +39,40 @@ test.describe('拍照导入（mock OCR）', () => {
 });
 
 test.describe('粘贴导入', () => {
+  test('Qwen 占位斜杠格式 → 无音标词条不以斜杠结尾', async ({ request }) => {
+    const res = await request.post(`${API_BASE}/imports/parse`, {
+      data: {
+        text: `middle school / 中学\nfactory / 'fæktri/ / 工厂\ntake care of / 保管；照顾`,
+      },
+    });
+    expect(res.ok()).toBeTruthy();
+    const data = await res.json();
+    const rows = data.rows || [];
+    const byText = Object.fromEntries(rows.map((r: { text: string }) => [r.text, r]));
+
+    expect(byText['middle school']?.text).toBe('middle school');
+    expect(byText['middle school']?.phonetic).toBe('');
+    expect(byText['take care of']?.text).not.toMatch(/\/\s*$/);
+    expect(byText['factory']?.phonetic).not.toMatch(/ \/$/);
+    expect(byText['factory']?.phonetic).toMatch(/^\/.*\/$/);
+  });
+
+  test('括号注记应归入中文释义而非英文', async ({ request }) => {
+    const res = await request.post(`${API_BASE}/imports/parse`, {
+      data: {
+        text: `Ms /mɪz/ （用于女子的姓氏或姓名前，不指明婚否）女士\nNice to see you! （以前见过面的人之间用）见到你很高兴！`,
+      },
+    });
+    expect(res.ok()).toBeTruthy();
+    const rows = (await res.json()).rows || [];
+    const byText = Object.fromEntries(rows.map((r: { text: string }) => [r.text, r]));
+
+    expect(byText['Ms']?.text).toBe('Ms');
+    expect(byText['Ms']?.meaningZh).toBe('（用于女子的姓氏或姓名前，不指明婚否）女士');
+    expect(byText['Nice to see you!']?.text).toBe('Nice to see you!');
+    expect(byText['Nice to see you!']?.meaningZh).toBe('（以前见过面的人之间用）见到你很高兴！');
+  });
+
   test('粘贴文本 → 解析草稿 → 确认入库', async ({ page }) => {
     await page.goto('/');
     await expectTotal(page, 0);

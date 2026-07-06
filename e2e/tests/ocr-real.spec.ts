@@ -49,11 +49,21 @@ test.describe('真实 OCR 识别（Qwen3-VL）@real', () => {
     }
 
     const data = await res.json();
-    const texts = (data.rows || []).map((r: any) => (r.text || '').toLowerCase());
+    const rows = data.rows || [];
+    const texts = rows.map((r: any) => (r.text || '').toLowerCase());
 
     // 至少识别出 3 个预期单词
     const hits = EXPECTED_WORDS.filter((w) => texts.some((t: string) => t.includes(w)));
     expect(hits.length, `应识别出预期单词，实际识别行：${texts.join(', ')}`).toBeGreaterThanOrEqual(3);
+
+    // 英文与音标字段不应含 OCR 占位斜杠 artifact
+    for (const row of rows) {
+      expect(row.text || '', `英文 ${row.text} 不应以 / 结尾`).not.toMatch(/\/\s*$/);
+      if (row.phonetic) {
+        expect(row.phonetic, `音标 ${row.phonetic} 不应含尾部占位斜杠`).not.toMatch(/\/\s+\/$/);
+        expect(row.phonetic, `音标 ${row.phonetic} 不应以 " /" 结尾`).not.toMatch(/ \/$/);
+      }
+    }
 
     // Unit/Lesson 标题不应出现
     const hasTitle = texts.some((t: string) => /^unit\s*\d/.test(t) || /^lesson\s*\d/.test(t));
@@ -109,6 +119,13 @@ test.describe('真实 OCR 识别（Qwen3-VL）@real', () => {
     const texts = finalRows.map((r: any) => (r.text || '').toLowerCase());
     const hits = EXPECTED_WORDS.filter((w) => texts.some((t: string) => t.includes(w)));
     expect(hits.length, `流式 final 应识别出预期单词`).toBeGreaterThanOrEqual(3);
+
+    for (const row of finalRows) {
+      expect(row.text || '', `英文 ${row.text} 不应以 / 结尾`).not.toMatch(/\/\s*$/);
+      if (row.phonetic) {
+        expect(row.phonetic, `音标 ${row.phonetic} 不应以 " /" 结尾`).not.toMatch(/ \/$/);
+      }
+    }
   });
 });
 

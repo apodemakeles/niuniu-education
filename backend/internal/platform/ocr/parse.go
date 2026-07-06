@@ -225,6 +225,12 @@ func tryParseMixed(lines []string) []DraftRow {
 var (
 	indexPrefixRe = regexp.MustCompile(`^\d+[\.\)、]\s*`)
 	pageSuffixRe  = regexp.MustCompile(`\s*p\.\s*\d+\s*$`) // 行尾页码 p. 30 / p.44
+	// Qwen-VL 常见：factory / 'fæktri/ /（音标后多一个占位斜杠）
+	ocrPhoneticPlaceholderRe = regexp.MustCompile(`^(.+?)\s+/(.*?)/\s*/\s*$`)
+	// 标准：factory /ˈfæktri/
+	inlinePhoneticRe = regexp.MustCompile(`^(.+?)\s+(/[^/\s][^/]*/)\s*$`)
+	// 无音标占位：middle school /
+	trailingSlashPlaceholderRe = regexp.MustCompile(`^(.+?)\s+/\s*$`)
 )
 
 func parseMixedLine(l string) (DraftRow, bool) {
@@ -240,8 +246,8 @@ func parseMixedLine(l string) (DraftRow, bool) {
 		return DraftRow{}, false
 	}
 
-	// 找第一段 CJK（中文释义）的起始位置
-	cjkStart := indexOfFirstCJK(l)
+	// 找中文释义起始：若注记以（…）包在英文与主释义之间，应从左括号起算，避免（挂到英文末尾
+	cjkStart := indexOfMeaningStart(l)
 	if cjkStart < 0 {
 		// 整行无中文：可能是纯英文单词行，释义缺失
 		enPart := strings.TrimSpace(l)
@@ -250,7 +256,9 @@ func parseMixedLine(l string) (DraftRow, bool) {
 			return DraftRow{}, false
 		}
 		text, phonetic := splitTextAndPhonetic(enPart)
-		return DraftRow{Text: text, Phonetic: phonetic, WordType: "new", Confidence: 1.0}, text != ""
+		return normalizeDraftRow(DraftRow{
+			Text: text, Phonetic: phonetic, WordType: "new", Confidence: 1.0,
+		}), text != ""
 	}
 	enPart := strings.TrimSpace(l[:cjkStart])
 	zhPart := strings.TrimSpace(l[cjkStart:])
@@ -262,7 +270,9 @@ func parseMixedLine(l string) (DraftRow, bool) {
 	if text == "" {
 		return DraftRow{}, false
 	}
-	return DraftRow{Text: text, MeaningZh: zhPart, Phonetic: phonetic, WordType: "new", Confidence: 1.0}, true
+	return normalizeDraftRow(DraftRow{
+		Text: text, MeaningZh: zhPart, Phonetic: phonetic, WordType: "new", Confidence: 1.0,
+	}), true
 }
 
 // buildRowFromCells 把若干单元格按内容启发式分配到 text/phonetic/meaningZh。
@@ -294,7 +304,9 @@ func buildRowFromCells(cells []string) (DraftRow, bool) {
 	if text == "" {
 		return DraftRow{}, false
 	}
-	return DraftRow{Text: text, MeaningZh: meaning, Phonetic: phonetic, WordType: "new", Confidence: 1.0}, true
+	return normalizeDraftRow(DraftRow{
+		Text: text, MeaningZh: meaning, Phonetic: phonetic, WordType: "new", Confidence: 1.0,
+	}), true
 }
 
 // isPhonetic 判断是否为音标：以 / 开头并以 / 结尾（如 /ˈæpl/）。
@@ -333,6 +345,29 @@ func indexOfFirstCJK(s string) int {
 	return -1
 }
 
+// indexOfMeaningStart 返回释义段起始下标。
+// 教材常见「英文 音标 （注）释义」，若从第一个汉字切分会把全角（留在英文侧。
+func indexOfMeaningStart(s string) int {
+	i := indexOfFirstCJK(s)
+	if i < 0 {
+		return -1
+	}
+	prefix := s[:i]
+	// 全角括号注记，如 Ms /mɪz/ （用于…）女士
+	if idx := strings.LastIndex(prefix, "（"); idx >= 0 {
+		return idx
+	}
+	// 半角括号注记：仅取音标闭括号 / 之后的（，避免 hospital /'hɒspɪt(ə)l/ 误匹配
+	lastSlash := strings.LastIndex(prefix, "/")
+	if lastSlash >= 0 {
+		afterPhonetic := prefix[lastSlash+1:]
+		if idx := strings.LastIndex(afterPhonetic, "("); idx >= 0 {
+			return lastSlash + 1 + idx
+		}
+	}
+	return i
+}
+
 // isWordLike 判断是否像英文单词：去掉标点后全为 ASCII 字母。
 func isWordLike(s string) bool {
 	s = stripLeadingIndex(s)
@@ -349,15 +384,76 @@ func isWordLike(s string) bool {
 }
 
 // splitTextAndPhonetic 从一段 ASCII 文本里分离单词与音标。
-// 如 "apple /ˈæpl/" → ("apple", "/ˈæpl/")
+// 支持标准格式 "apple /ˈæpl/" 与 Qwen-VL 占位斜杠 "middle school /"、"factory / 'fæktri/ /"。
 func splitTextAndPhonetic(s string) (text, phonetic string) {
 	s = strings.TrimSpace(s)
-	if i := strings.Index(s, "/"); i >= 0 {
-		if j := strings.LastIndex(s, "/"); j > i {
-			return strings.TrimSpace(s[:i]), s[i : j+1]
+	if s == "" {
+		return "", ""
+	}
+
+	if m := ocrPhoneticPlaceholderRe.FindStringSubmatch(s); m != nil {
+		body := strings.TrimSpace(m[2])
+		if body != "" {
+			return strings.TrimSpace(m[1]), cleanPhonetic(wrapPhonetic(body))
 		}
 	}
-	return s, ""
+	if m := inlinePhoneticRe.FindStringSubmatch(s); m != nil {
+		p := cleanPhonetic(strings.TrimSpace(m[2]))
+		if isPhonetic(p) {
+			return strings.TrimSpace(m[1]), p
+		}
+	}
+	if m := trailingSlashPlaceholderRe.FindStringSubmatch(s); m != nil {
+		return strings.TrimSpace(m[1]), ""
+	}
+
+	// 兜底：仅当 /.../ 中间像音标时才切分
+	if i := strings.Index(s, "/"); i >= 0 {
+		if j := strings.LastIndex(s, "/"); j > i {
+			candidate := strings.TrimSpace(s[:i])
+			ph := cleanPhonetic(strings.TrimSpace(s[i : j+1]))
+			if isPhonetic(ph) {
+				return candidate, ph
+			}
+		}
+	}
+
+	return strings.TrimSpace(strings.TrimSuffix(s, "/")), ""
+}
+
+func wrapPhonetic(body string) string {
+	body = strings.Trim(strings.TrimSpace(body), "/")
+	if body == "" {
+		return ""
+	}
+	return "/" + body + "/"
+}
+
+// cleanPhonetic 去掉 OCR 在音标尾部多打的占位斜杠，如 "/'fæktri/ /" → "/'fæktri/"。
+func cleanPhonetic(p string) string {
+	p = strings.TrimSpace(p)
+	for strings.HasSuffix(p, "/ /") || strings.HasSuffix(p, " /") {
+		p = strings.TrimSpace(strings.TrimSuffix(p, "/"))
+		p = strings.TrimSpace(strings.TrimSuffix(p, "/"))
+	}
+	if p == "" {
+		return ""
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	if !strings.HasSuffix(p, "/") {
+		p = p + "/"
+	}
+	return p
+}
+
+func normalizeDraftRow(r DraftRow) DraftRow {
+	r.Text = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(r.Text), "/"))
+	r.Text = strings.TrimSpace(strings.TrimSuffix(r.Text, "（"))
+	r.Text = strings.TrimSpace(strings.TrimSuffix(r.Text, "("))
+	r.Phonetic = cleanPhonetic(r.Phonetic)
+	return r
 }
 
 // stripLeadingIndex 去掉行首序号前缀，如 "1. "、"2) "、"3、 "。

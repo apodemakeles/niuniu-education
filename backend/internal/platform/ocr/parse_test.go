@@ -43,6 +43,146 @@ func TestIsLikelyTitle(t *testing.T) {
 	}
 }
 
+func TestParseQwenVLOutputWithPlaceholderSlash(t *testing.T) {
+	// 来自真实 Qwen3-VL 对教材截图的输出（import_images.ocr_raw_text）
+	raw := `fire station / 消防站
+factory / 'fæktri/ / 工厂
+* farm /'fa:m/ / 农场；牧场；饲养场
+middle school / 中学
+take care of / 保管；照顾
+living room / 客厅；起居室
+do the dishes / 洗餐具
+What a mess! / 真是一团糟啊！
+Unit 4`
+	rows := ParseOCRText(raw)
+	byText := map[string]DraftRow{}
+	for _, r := range rows {
+		if r.Text != "" {
+			byText[r.Text] = r
+		}
+	}
+
+	noPhonetic := []struct {
+		text    string
+		meaning string
+	}{
+		{"fire station", "消防站"},
+		{"middle school", "中学"},
+		{"take care of", "保管；照顾"},
+		{"living room", "客厅；起居室"},
+		{"do the dishes", "洗餐具"},
+		{"What a mess!", "真是一团糟啊！"},
+	}
+	for _, c := range noPhonetic {
+		r, ok := byText[c.text]
+		if !ok {
+			t.Errorf("未识别 %q", c.text)
+			continue
+		}
+		if strings.HasSuffix(r.Text, "/") {
+			t.Errorf("%q 英文不应以斜杠结尾: %q", c.text, r.Text)
+		}
+		if r.Phonetic != "" {
+			t.Errorf("%q 不应有音标, got %q", c.text, r.Phonetic)
+		}
+		if r.MeaningZh != c.meaning {
+			t.Errorf("%q 释义: got %q, want %q", c.text, r.MeaningZh, c.meaning)
+		}
+	}
+
+	r, ok := byText["factory"]
+	if !ok {
+		t.Fatal("未识别 factory")
+	}
+	if strings.HasSuffix(r.Phonetic, " /") || strings.HasSuffix(r.Phonetic, "/ /") {
+		t.Errorf("factory 音标尾部有多余斜杠: %q", r.Phonetic)
+	}
+	if !strings.HasPrefix(r.Phonetic, "/") || !strings.HasSuffix(r.Phonetic, "/") {
+		t.Errorf("factory 音标格式异常: %q", r.Phonetic)
+	}
+	if r.MeaningZh != "工厂" {
+		t.Errorf("factory 释义: got %q", r.MeaningZh)
+	}
+}
+
+func TestSplitTextAndPhonetic(t *testing.T) {
+	cases := []struct {
+		in          string
+		wantText    string
+		wantPhonetic string
+	}{
+		{"middle school /", "middle school", ""},
+		{"factory / 'fæktri/ /", "factory", "/'fæktri/"},
+		{"factory /ˈfæktri/", "factory", "/ˈfæktri/"},
+		{"apple /ˈæpl/", "apple", "/ˈæpl/"},
+		{"fire station /ˈfaɪər ˌsteɪʃən/", "fire station", "/ˈfaɪər ˌsteɪʃən/"},
+	}
+	for _, c := range cases {
+		text, phonetic := splitTextAndPhonetic(c.in)
+		if text != c.wantText || phonetic != c.wantPhonetic {
+			t.Errorf("splitTextAndPhonetic(%q) = (%q, %q), want (%q, %q)",
+				c.in, text, phonetic, c.wantText, c.wantPhonetic)
+		}
+	}
+}
+
+func TestParseParentheticalMeaning(t *testing.T) {
+	// 来自真实 OCR 原文（import_images），OCR 本身括号位置正确
+	raw := `Ms /mɪz/ （用于女子的姓氏或姓名前，不指明婚否）女士
+Nice to see you! （以前见过面的人之间用）见到你很高兴！
+him /hɪm/ （he 的宾格）他
+hospital /'hɒspɪt(ə)l/ 医院`
+	rows := ParseOCRText(raw)
+	byText := map[string]DraftRow{}
+	for _, r := range rows {
+		byText[r.Text] = r
+	}
+
+	ms := byText["Ms"]
+	if ms.MeaningZh != "（用于女子的姓氏或姓名前，不指明婚否）女士" {
+		t.Errorf("Ms 释义: got %q", ms.MeaningZh)
+	}
+	if strings.Contains(ms.Text, "（") {
+		t.Errorf("Ms 英文不应含括号: %q", ms.Text)
+	}
+
+	nice := byText["Nice to see you!"]
+	if nice.MeaningZh != "（以前见过面的人之间用）见到你很高兴！" {
+		t.Errorf("Nice to see you! 释义: got %q", nice.MeaningZh)
+	}
+	if strings.Contains(nice.Text, "（") {
+		t.Errorf("Nice to see you! 英文不应含括号: %q", nice.Text)
+	}
+
+	him := byText["him"]
+	if him.MeaningZh != "（he 的宾格）他" {
+		t.Errorf("him 释义: got %q", him.MeaningZh)
+	}
+
+	hosp := byText["hospital"]
+	if hosp.MeaningZh != "医院" {
+		t.Errorf("hospital 释义不应误含音标内括号: got %q", hosp.MeaningZh)
+	}
+}
+
+func TestIndexOfMeaningStart(t *testing.T) {
+	cases := []struct {
+		in   string
+		want int // -1 表示期望从该 rune 起为释义；用子串校验更直观
+		at   string
+	}{
+		{"Ms /mɪz/ （用于", len("Ms /mɪz/ "), "（"},
+		{"Nice to see you! （以前", len("Nice to see you! "), "（"},
+		{"factory /ˈfæktri/ 工厂", strings.Index("factory /ˈfæktri/ 工厂", "工"), "工"},
+	}
+	for _, c := range cases {
+		got := indexOfMeaningStart(c.in)
+		if got < 0 || c.in[got:] != c.in[c.want:] && !strings.HasPrefix(c.in[got:], c.at) {
+			t.Errorf("indexOfMeaningStart(%q)=%d, want prefix %q, got %q", c.in, got, c.at, c.in[got:])
+		}
+	}
+}
+
 func TestParseQwen3VLOutput(t *testing.T) {
 	// Qwen3-VL-32B-Instruct 对教材截图的真实输出（来自实测）。
 	// 格式：单词(可多词) 音标 中文 p.页码，部分行带 * 标记、Unit 标题。

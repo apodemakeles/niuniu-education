@@ -46,10 +46,10 @@ func (p *SiliconFlowProvider) promptForModel() string {
 	if strings.Contains(m, "deepseek-ocr") {
 		return "Free OCR."
 	}
-	// Qwen-VL 等通用视觉模型：用明确指令，要求逐行列出，且禁止自行补充音标
-	return "识别这张图片里实际印刷的英语单词、音标和中文释义，逐行列出。" +
-		"只识别图片中确实印出的内容，不要自行补充音标或释义。某个字段图片里没有就留空。" +
-		"不要输出标题、页码、单元名等非单词内容。"
+	// Qwen-VL 等通用视觉模型：明确输出格式，避免无音标词条用斜杠占位
+	return "识别图片中的英语单词表，逐行输出，每行：英文 [音标] 中文释义。" +
+		"有音标时写 factory /'fæktri/ 工厂；无音标时写 middle school 中学，不要用斜杠占位。" +
+		"只转录图片里实际印出的内容，不要编造音标。不要输出 Unit/Lesson 标题、页码(p.30)等。"
 }
 
 func (p *SiliconFlowProvider) Recognize(ctx context.Context, image []byte, mimeType string) (*Result, error) {
