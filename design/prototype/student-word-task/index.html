@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>学生端每日背单词任务原型</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Daily Word Mission</p>
+          <h1>今日背单词</h1>
+        </div>
+        <div class="date-card">
+          <span id="todayText">今天</span>
+          <strong id="todayWordCount">0 个词</strong>
+        </div>
+      </header>
+
+      <nav class="stepper" aria-label="学习流程">
+        <button class="step active" type="button" data-view="dashboard">
+          <span>1</span>
+          今日任务
+        </button>
+        <button class="step" type="button" data-view="cards" hidden>
+          <span>2</span>
+          单词卡
+        </button>
+        <button class="step" type="button" data-view="reading" hidden>
+          <span>3</span>
+          延伸阅读
+        </button>
+        <button class="step" type="button" data-view="dictation" hidden>
+          <span>4</span>
+          默写
+        </button>
+        <button class="step" type="button" data-view="done" hidden>
+          <span>5</span>
+          完成
+        </button>
+      </nav>
+
+      <section class="view active" id="dashboardView">
+        <section class="hero-panel">
+          <div class="hero-main">
+            <div class="hero-copy">
+              <p class="small-label">今日任务</p>
+              <h2>先听，再读，最后默写</h2>
+              <p>
+                新词池最多 3 个，非新词池最多 9 个；两个池独立计算，标签不决定筛选。
+              </p>
+              <div class="load-tag" id="loadTag">
+                <strong>普通日</strong>
+                <span>今天复习量适中，按顺序完成就好。</span>
+              </div>
+              <button class="primary-btn" id="startBtn" type="button">开始学习</button>
+            </div>
+            <div class="study-visual" aria-hidden="true">
+              <div class="orbit orbit-one"></div>
+              <div class="orbit orbit-two"></div>
+              <div class="book-shape">
+                <span>Aa</span>
+                <i></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="mission-words-section">
+            <div class="panel-head">
+              <h2>任务词</h2>
+              <div class="counts">
+                <span id="firstLaneCount">新词池 0</span>
+                <span id="reviewLaneCount">非新词池 0</span>
+              </div>
+            </div>
+            <div class="word-grid" id="missionWords"></div>
+          </div>
+        </section>
+      </section>
+
+      <section class="view" id="cardsView">
+        <div class="card-layout">
+          <aside class="queue-panel">
+            <h2>学习队列</h2>
+            <div id="queueList" class="queue-list"></div>
+          </aside>
+
+          <section class="word-card">
+            <div class="card-top">
+              <span id="cardProgress">1 / 6</span>
+              <span id="cardType" class="pill">新词</span>
+            </div>
+            <p class="phonetic" id="cardPhonetic">/ˈæpl/</p>
+            <h2 id="cardWord">apple</h2>
+            <p class="meaning" id="cardMeaning">苹果</p>
+            <div class="example-box">
+              <span>例句</span>
+              <p id="cardExample">I eat an apple after lunch.</p>
+            </div>
+            <div class="listen-row">
+              <button class="sound-btn" id="listenBtn" type="button">听读音</button>
+              <button class="secondary-btn" id="hardBtn" type="button">不会读</button>
+            </div>
+            <div class="card-actions">
+              <button class="secondary-btn" id="prevCardBtn" type="button">上一个</button>
+              <button class="primary-btn" id="readDoneBtn" type="button" disabled>我读完了</button>
+              <button class="secondary-btn" id="nextCardBtn" type="button">下一个</button>
+            </div>
+            <p class="hint" id="cardHint">先听一遍读音，再自己读出来。</p>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="readingView">
+        <section class="reading-panel">
+          <div class="panel-head">
+            <div>
+              <p class="small-label">Reading</p>
+              <h2>A Busy Morning</h2>
+            </div>
+            <button class="secondary-btn" id="listenStoryBtn" type="button">再听重点词</button>
+          </div>
+          <p class="scene-note">中文提示：这是一个上学前的早晨，短文会反复出现今天的任务词。</p>
+          <article class="story" id="storyText"></article>
+          <div class="appearances" id="appearanceList"></div>
+          <button class="primary-btn" id="readingDoneBtn" type="button">我读完短文了</button>
+        </section>
+      </section>
+
+      <section class="view" id="dictationView">
+        <section class="dictation-panel">
+          <div class="panel-head">
+            <div>
+              <p class="small-label">Dictation</p>
+              <h2>根据中文默写英文</h2>
+            </div>
+            <button class="secondary-btn" id="togglePhoneticBtn" type="button">显示音标提示</button>
+          </div>
+          <div class="dictation-list" id="dictationList"></div>
+          <div class="dictation-actions">
+            <button class="primary-btn" id="submitDictationBtn" type="button">提交默写</button>
+            <button class="secondary-btn" id="retryWrongBtn" type="button" hidden>订正错词</button>
+          </div>
+        </section>
+      </section>
+
+      <section class="view" id="doneView">
+        <section class="done-panel">
+          <div class="badge-mark">✓</div>
+          <p class="small-label">Finished</p>
+          <h2>今日任务完成</h2>
+          <p id="summaryText">完成 6 个单词学习。</p>
+          <div class="result-grid">
+            <div>
+              <span>默写正确</span>
+              <strong id="correctCount">0</strong>
+            </div>
+            <div>
+              <span>需要强化</span>
+              <strong id="wrongCount">0</strong>
+            </div>
+            <div>
+              <span>明天复习</span>
+              <strong id="tomorrowCount">6</strong>
+            </div>
+          </div>
+          <div class="tomorrow-box">
+            <h3>明天优先复习</h3>
+            <div id="tomorrowWords"></div>
+          </div>
+          <div class="checkin-box">
+            <div class="checkin-head">
+              <div>
+                <h3>本月打卡</h3>
+                <p id="checkinSummary">连续打卡 0 天</p>
+              </div>
+              <span id="monthLabel">本月</span>
+            </div>
+            <div class="checkin-grid" id="checkinGrid"></div>
+          </div>
+          <button class="primary-btn" id="finishBtn" type="button">完成今日任务</button>
+        </section>
+      </section>
+
+      <div class="toast" id="toast" role="status" aria-live="polite"></div>
+      <div class="bonus-modal-backdrop" id="checkinBonusModal" hidden>
+        <section class="bonus-modal" role="dialog" aria-modal="true" aria-labelledby="checkinBonusTitle">
+          <img src="./assets/bonus-star.svg" alt="连续打卡奖励" />
+          <p class="small-label">Check-in Bonus</p>
+          <h2 id="checkinBonusTitle">连续 7 天打卡</h2>
+          <p>今天也完成啦，获得一枚连续打卡 bonus。</p>
+          <button class="primary-btn" id="closeCheckinBonusBtn" type="button">收下奖励</button>
+        </section>
+      </div>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
