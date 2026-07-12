@@ -16,12 +16,18 @@ type Service struct {
 	llm         llm.Provider
 	logger      *slog.Logger
 	grade       string // 孩子年级/难度提示（透传给 LLM）
+	debugMode   bool   // 调试模式：跳过阅读最短停留校验
 	readingMu   sync.Mutex
 	readingJobs map[string]bool
 }
 
 func NewService(store *Store, llmProvider llm.Provider, grade string, logger *slog.Logger) *Service {
 	return &Service{store: store, llm: llmProvider, grade: grade, logger: logger, readingJobs: map[string]bool{}}
+}
+
+// SetDebugMode 开启/关闭调试模式（由 config.debug.enabled 注入）。
+func (s *Service) SetDebugMode(enabled bool) {
+	s.debugMode = enabled
 }
 
 // --- 任务生成（幂等：当日已有 daily_tasks 则直接复用） ---
@@ -304,12 +310,17 @@ func (s *Service) buildCardDetail(ctx context.Context, tasks []DailyTask, wordID
 		learningByID[l.WordID] = l
 	}
 	mw := toMissionWord(ws[0], t, learningByID[t.WordID])
+	example, err := s.store.RandomExample(ctx, t.WordID)
+	exampleMissing := err != nil
+	if exampleMissing {
+		example = systemExample(ws[0].Text)
+	}
 	return CardDetailResponse{
 		Word:           mw,
 		CardIndex:      idx,
 		Total:          len(tasks),
-		Example:        systemExample(ws[0].Text),
-		ExampleMissing: true,
+		Example:        example,
+		ExampleMissing: exampleMissing,
 		Listened:       t.ReadStatus == ReadListened || t.ReadStatus == ReadDone,
 		ReadDone:       t.ReadStatus == ReadDone,
 		IsFirstCard:    idx == 0,
@@ -605,7 +616,8 @@ func (s *Service) buildReadingResponse(p ReadingPassage) ReadingResponse {
 	if p.ReadingCompletedAt.Valid {
 		resp.CompletedAt = p.ReadingCompletedAt.String
 	}
-	resp.CanFinish = resp.ElapsedSeconds >= resp.MinSeconds || p.ReadingCompletedAt.Valid
+	resp.DebugMode = s.debugMode
+	resp.CanFinish = resp.ElapsedSeconds >= resp.MinSeconds || p.ReadingCompletedAt.Valid || s.debugMode
 
 	if p.AIGenerationStatus == ReadingSuccess {
 		// 渲染高亮 HTML（用 DB 存的覆盖词 id 反查单词）
@@ -661,6 +673,7 @@ func (s *Service) MarkReadingStarted(ctx context.Context) error {
 }
 
 // CompleteReading 完成阅读：校验停留≥minSeconds，写 completed_at。
+// 调试模式下跳过停留时长校验，便于本地快速走通流程。
 func (s *Service) CompleteReading(ctx context.Context) error {
 	date := Today()
 	p, err := s.store.GetReading(ctx, date)
@@ -680,7 +693,7 @@ func (s *Service) CompleteReading(ctx context.Context) error {
 	if !ok {
 		return ErrReadingNotStarted
 	}
-	if int(time.Since(start).Seconds()) < p.ReadingMinSeconds {
+	if !s.debugMode && int(time.Since(start).Seconds()) < p.ReadingMinSeconds {
 		return ErrReadingTooShort
 	}
 	p.ReadingCompletedAt.Valid = true
@@ -784,7 +797,10 @@ func (s *Service) SubmitDictation(ctx context.Context, req SubmitDictationReques
 		learningByID[l.WordID] = l
 	}
 
-	resp := SubmitDictationResponse{}
+	resp := SubmitDictationResponse{
+		Items:    []DictationItem{},
+		BonusIDs: []string{},
+	}
 	updatedTasks := make([]DailyTask, 0, len(tasks))
 	for _, t := range tasks {
 		if t.SubmissionLocked {
@@ -867,7 +883,10 @@ func (s *Service) CorrectDictation(ctx context.Context, req CorrectDictationRequ
 		answerByTaskID[a.TaskID] = a.Answer
 	}
 
-	resp := SubmitDictationResponse{}
+	resp := SubmitDictationResponse{
+		Items:    []DictationItem{},
+		BonusIDs: []string{},
+	}
 	for _, t := range tasks {
 		if !t.SubmissionLocked {
 			continue // 未提交首次，不能订正
@@ -930,7 +949,8 @@ func (s *Service) GetDone(ctx context.Context) (DoneResponse, error) {
 
 	resp := DoneResponse{Date: date, Total: len(tasks)}
 	hasCorrection := false
-	var tomorrow, reinforce []MissionWord
+	tomorrow := make([]MissionWord, 0)
+	reinforce := make([]MissionWord, 0)
 	for _, t := range tasks {
 		w, ok := wordByID[t.WordID]
 		if !ok {

@@ -100,6 +100,16 @@ func (s *Store) GetWords(ctx context.Context, ids []string) ([]WordInfo, error) 
 	return out, nil
 }
 
+// RandomExample 随机读取一条已生成例句，学生每次进入单词卡可看到不同语境。
+func (s *Store) RandomExample(ctx context.Context, wordID string) (string, error) {
+	var sentence string
+	err := s.db.QueryRowContext(ctx, `SELECT sentence FROM word_examples WHERE word_id=? ORDER BY random() LIMIT 1`, wordID).Scan(&sentence)
+	if err != nil {
+		return "", err
+	}
+	return sentence, nil
+}
+
 // ListLearningsByStatus 按状态读取学习记录（任务生成用）。
 func (s *Store) ListLearnings(ctx context.Context) ([]WordLearning, error) {
 	rows, err := s.db.QueryContext(ctx, `

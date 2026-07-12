@@ -9,6 +9,7 @@ import PhotoImportModal from '@/components/import/PhotoImportModal.vue'
 import PasteImportModal from '@/components/import/PasteImportModal.vue'
 import WordEditModal from '@/components/word/WordEditModal.vue'
 import WordCreateModal from '@/components/word/WordCreateModal.vue'
+import ExampleBackfillModal from '@/components/word/ExampleBackfillModal.vue'
 import ExportModal from '@/components/export/ExportModal.vue'
 import Toast from '@/components/common/Toast.vue'
 
@@ -20,6 +21,7 @@ const showPhotoModal = ref(false)
 const showPasteModal = ref(false)
 const showCreateModal = ref(false)
 const showExportModal = ref(false)
+const showExampleBackfill = ref(false)
 const editingWord = ref<Word | null>(null)
 
 // 搜索框本地值（防抖后提交到 store；跳过与 store 相同的值，避免挂载时重复请求）
@@ -152,6 +154,7 @@ onMounted(() => store.load())
           <button class="primary-btn" type="button" @click="showCreateModal = true">逐个录入</button>
           <button class="secondary-btn" type="button" @click="showPasteModal = true">粘贴导入</button>
           <button class="secondary-btn" type="button" @click="showPhotoModal = true">拍照导入</button>
+          <button class="secondary-btn" type="button" @click="showExampleBackfill = true">补全缺失例句</button>
         </div>
 
         <div class="table-toolbar">
@@ -256,6 +259,11 @@ onMounted(() => store.load())
       :word="editingWord"
       @saved="onWordSaved"
       @closed="editingWord = null"
+    />
+    <ExampleBackfillModal
+      v-if="showExampleBackfill"
+      @finished="toast?.show('例句补全完成，可在编辑页查看或单句重试。')"
+      @closed="showExampleBackfill = false"
     />
     <ExportModal v-if="showExportModal" @closed="showExportModal = false" />
     <Toast ref="toast" />

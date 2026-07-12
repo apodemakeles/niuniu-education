@@ -27,6 +27,7 @@ export interface ConfirmRow {
 
 export interface ImportResultDetail {
   rowId?: string
+  wordId?: string
   text: string
   result: 'added' | 'skipped' | 'invalid'
   reason?: string

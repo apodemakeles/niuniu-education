@@ -33,6 +33,12 @@ func newTestDB(t *testing.T) *sql.DB {
 	);
 	CREATE UNIQUE INDEX uniq_word_text_meaning ON words(library_id, text, meaning_zh) WHERE deleted_at IS NULL;
 	CREATE INDEX idx_words_type_status ON words(library_id, word_type, status) WHERE deleted_at IS NULL;
+	CREATE TABLE word_examples (
+		id TEXT PRIMARY KEY, word_id TEXT NOT NULL REFERENCES words(id) ON DELETE CASCADE,
+		sentence TEXT NOT NULL, display_order INTEGER NOT NULL,
+		created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+		UNIQUE(word_id, display_order)
+	);
 	CREATE TABLE word_learning (
 		word_id TEXT PRIMARY KEY REFERENCES words(id) ON DELETE CASCADE,
 		library_id TEXT NOT NULL DEFAULT 'main-library',

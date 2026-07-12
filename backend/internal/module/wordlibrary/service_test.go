@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/apodemakeles/niuniu-education/backend/internal/platform/llm"
 	"github.com/apodemakeles/niuniu-education/backend/internal/platform/ocr"
 )
 
@@ -12,7 +13,7 @@ import (
 func newTestService(t *testing.T) (*Service, *Store) {
 	t.Helper()
 	store := NewStore(newTestDB(t))
-	svc := NewService(store, ocr.NewMockProvider(), slog.Default())
+	svc := NewService(store, ocr.NewMockProvider(), llm.NewMockProvider(""), slog.Default())
 	return svc, store
 }
 
@@ -110,9 +111,9 @@ func TestParsePasteForDraft(t *testing.T) {
 	svc, _ := newTestService(t)
 
 	cases := []struct {
-		name  string
-		text  string
-		want  []struct{ text, meaning string }
+		name string
+		text string
+		want []struct{ text, meaning string }
 	}{
 		{
 			"空格分隔含音标",

@@ -107,7 +107,8 @@ function reviewLabel(item: DictationResponse['items'][number]) {
 
 function hasBonus(item: DictationResponse['items'][number]) {
   // bonusAwarded 来自后端持久化结果，刷新后仍可稳定展示；bonusIds 仅用于本次提交的即时反馈。
-  return item.bonusAwarded || props.bonusIds.includes(item.wordId)
+  // bonusIds 可能为 null（后端空切片 JSON 序列化为 null），需兜底。
+  return item.bonusAwarded || (props.bonusIds ?? []).includes(item.wordId)
 }
 
 watch(

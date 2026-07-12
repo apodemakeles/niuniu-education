@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import { updateWord } from '@/api/words'
 import type { Word, WordType } from '@/types/word'
+import WordExamplesPanel from './WordExamplesPanel.vue'
 
 const props = defineProps<{ word: Word }>()
 const emit = defineEmits<{
@@ -70,6 +71,8 @@ async function onSave() {
           </select>
         </div>
         <p class="note full">学习状态由孩子的实际学习结果自动记录，编辑词条不会改变它。</p>
+
+        <div class="full"><WordExamplesPanel :word-id="word.id" /></div>
 
         <p v-if="error" class="note error full">{{ error }}</p>
 

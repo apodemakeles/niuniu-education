@@ -36,9 +36,15 @@ type ConfirmRow struct {
 // ImportResultDetail 单行的入库结果。
 type ImportResultDetail struct {
 	RowID  string `json:"rowId,omitempty"`
+	WordID string `json:"wordId,omitempty"`
 	Text   string `json:"text"`
 	Result string `json:"result"` // added / skipped / invalid
 	Reason string `json:"reason,omitempty"`
+}
+
+// GenerateExamplesRequest 是批量例句生成请求。
+type GenerateExamplesRequest struct {
+	WordIDs []string `json:"wordIds"`
 }
 
 // ImportResultResponse 是 /imports/confirm 的响应。

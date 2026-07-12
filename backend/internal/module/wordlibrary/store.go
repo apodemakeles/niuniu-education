@@ -229,6 +229,110 @@ func (s *Store) Get(ctx context.Context, id string) (Word, error) {
 	return getWord(ctx, s.db, id)
 }
 
+// ListExamples 返回一个单词的例句（按展示顺序）。
+func (s *Store) ListExamples(ctx context.Context, wordID string) ([]WordExample, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, word_id, sentence, display_order, created_at, updated_at
+		FROM word_examples WHERE word_id=? ORDER BY display_order ASC`, wordID)
+	if err != nil {
+		return nil, fmt.Errorf("list word examples: %w", err)
+	}
+	defer rows.Close()
+	examples := []WordExample{}
+	for rows.Next() {
+		var e WordExample
+		if err := rows.Scan(&e.ID, &e.WordID, &e.Sentence, &e.DisplayOrder, &e.CreatedAt, &e.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan word example: %w", err)
+		}
+		examples = append(examples, e)
+	}
+	return examples, rows.Err()
+}
+
+// RandomExample 随机取一条例句，学生端每次进入单词卡可看到不同语境。
+func (s *Store) RandomExample(ctx context.Context, wordID string) (WordExample, error) {
+	var e WordExample
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, word_id, sentence, display_order, created_at, updated_at
+		FROM word_examples WHERE word_id=? ORDER BY random() LIMIT 1`, wordID).
+		Scan(&e.ID, &e.WordID, &e.Sentence, &e.DisplayOrder, &e.CreatedAt, &e.UpdatedAt)
+	if err != nil {
+		return WordExample{}, err
+	}
+	return e, nil
+}
+
+// ReplaceExamples 用新生成的三条例句原子替换旧例句。
+func (s *Store) ReplaceExamples(ctx context.Context, wordID string, sentences []string) ([]WordExample, error) {
+	if len(sentences) != 3 {
+		return nil, fmt.Errorf("例句数量必须为 3")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin replace examples: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `DELETE FROM word_examples WHERE word_id=?`, wordID); err != nil {
+		return nil, fmt.Errorf("delete old examples: %w", err)
+	}
+	for i, sentence := range sentences {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO word_examples(id, word_id, sentence, display_order)
+			VALUES (lower(hex(randomblob(8))), ?, ?, ?)`, wordID, sentence, i); err != nil {
+			return nil, fmt.Errorf("insert word example: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit replace examples: %w", err)
+	}
+	return s.ListExamples(ctx, wordID)
+}
+
+// UpdateExample 更新一条例句，供家长单句重新生成使用。
+func (s *Store) UpdateExample(ctx context.Context, wordID, exampleID, sentence string) (WordExample, error) {
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE word_examples SET sentence=?, updated_at=datetime('now')
+		WHERE id=? AND word_id=?`, sentence, exampleID, wordID)
+	if err != nil {
+		return WordExample{}, fmt.Errorf("update word example: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return WordExample{}, ErrNotFound
+	}
+	var e WordExample
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT id, word_id, sentence, display_order, created_at, updated_at FROM word_examples WHERE id=?`, exampleID).
+		Scan(&e.ID, &e.WordID, &e.Sentence, &e.DisplayOrder, &e.CreatedAt, &e.UpdatedAt); err != nil {
+		return WordExample{}, fmt.Errorf("get updated example: %w", err)
+	}
+	return e, nil
+}
+
+// ListMissingExampleTargets 返回例句不足 3 条的历史单词，供家长主动补全。
+func (s *Store) ListMissingExampleTargets(ctx context.Context) ([]ExampleTarget, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT w.id, w.text, w.meaning_zh
+		FROM words w
+		LEFT JOIN word_examples e ON e.word_id=w.id
+		WHERE w.deleted_at IS NULL AND w.library_id=?
+		GROUP BY w.id, w.text, w.meaning_zh
+		HAVING COUNT(e.id) < 3
+		ORDER BY w.created_at ASC, w.id ASC`, MainLibraryID)
+	if err != nil {
+		return nil, fmt.Errorf("list missing example targets: %w", err)
+	}
+	defer rows.Close()
+	out := []ExampleTarget{}
+	for rows.Next() {
+		var target ExampleTarget
+		if err := rows.Scan(&target.WordID, &target.Text, &target.MeaningZh); err != nil {
+			return nil, fmt.Errorf("scan missing example target: %w", err)
+		}
+		out = append(out, target)
+	}
+	return out, rows.Err()
+}
+
 func getWord(ctx context.Context, q rowQuerier, id string) (Word, error) {
 	query := `SELECT ` + wordSelectColumns + ` FROM words w` + wordLearningJoin + ` WHERE w.id=? AND w.deleted_at IS NULL`
 	var w Word

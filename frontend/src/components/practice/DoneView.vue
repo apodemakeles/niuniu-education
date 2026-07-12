@@ -19,7 +19,7 @@ const showBonus = ref(false)
 
 const checkedInToday = computed(() => {
   if (!props.done) return false
-  return props.done.checkin.checkedDays.includes(props.done.checkin.todayDay)
+  return (props.done.checkin.checkedDays ?? []).includes(props.done.checkin.todayDay)
 })
 
 // 父组件置 bonusJustEarned=true 时弹窗
@@ -37,7 +37,7 @@ const calendarDays = computed(() => {
   const year = now.getFullYear()
   const month = now.getMonth() + 1
   const daysInMonth = new Date(year, month, 0).getDate()
-  const checkedSet = new Set(props.done.checkin.checkedDays)
+  const checkedSet = new Set(props.done.checkin.checkedDays ?? [])
   return Array.from({ length: daysInMonth }, (_, i) => {
     const day = i + 1
     return {
@@ -82,7 +82,7 @@ function onFinish() {
         </div>
       </div>
 
-      <div class="kid-tomorrow-box" v-if="done.tomorrowReview.length">
+      <div class="kid-tomorrow-box" v-if="done.tomorrowReview?.length">
         <h3>明天优先复习</h3>
         <div>
           <span v-for="w in done.tomorrowReview" :key="w.id">
@@ -115,7 +115,7 @@ function onFinish() {
         <button
           class="secondary-btn"
           type="button"
-          v-if="done.needReinforce.length && !done.hasCorrection"
+          v-if="done.needReinforce?.length && !done.hasCorrection"
           @click="emit('retryWrong')"
         >
           再练一遍错词

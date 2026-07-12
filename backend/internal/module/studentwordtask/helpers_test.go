@@ -47,6 +47,12 @@ func newTestDB(t *testing.T) *sql.DB {
 		mastered_review_index INTEGER NOT NULL DEFAULT 0, first_mastered_date TEXT,
 		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 	);
+	CREATE TABLE word_examples (
+		id TEXT PRIMARY KEY, word_id TEXT NOT NULL REFERENCES words(id) ON DELETE CASCADE,
+		sentence TEXT NOT NULL, display_order INTEGER NOT NULL,
+		created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+		UNIQUE(word_id, display_order)
+	);
 	CREATE TABLE daily_tasks (
 		id TEXT PRIMARY KEY, task_date TEXT NOT NULL, word_id TEXT NOT NULL REFERENCES words(id) ON DELETE CASCADE,
 		library_id TEXT NOT NULL DEFAULT 'main-library', pool_type TEXT NOT NULL CHECK (pool_type IN ('first','review')),

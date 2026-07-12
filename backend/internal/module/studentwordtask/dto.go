@@ -38,8 +38,8 @@ type CardDetailResponse struct {
 	Word           MissionWord `json:"word"`
 	CardIndex      int         `json:"cardIndex"` // 0 起
 	Total          int         `json:"total"`
-	Example        string      `json:"example"`        // 系统占位例句
-	ExampleMissing bool        `json:"exampleMissing"` // 标记「例句待补充」（本期始终 true）
+	Example        string      `json:"example"`        // AI 生成例句；缺失时才回退占位
+	ExampleMissing bool        `json:"exampleMissing"` // 标记「例句待补充」
 	Listened       bool        `json:"listened"`       // 当前词是否已听过音
 	ReadDone       bool        `json:"readDone"`       // 当前词是否已读完
 	IsFirstCard    bool        `json:"isFirstCard"`
@@ -60,7 +60,8 @@ type ReadingResponse struct {
 	StartedAt      string        `json:"startedAt,omitempty"`
 	CompletedAt    string        `json:"completedAt,omitempty"`
 	ElapsedSeconds int           `json:"elapsedSeconds"` // 已停留秒数（从 started_at 算）
-	CanFinish      bool          `json:"canFinish"`      // 是否满 minSeconds
+	CanFinish      bool          `json:"canFinish"`      // 是否满 minSeconds（或调试模式）
+	DebugMode      bool          `json:"debugMode"`      // 调试模式：可跳过阅读最短停留
 }
 
 // CoveredWord 短文覆盖的今日任务词。

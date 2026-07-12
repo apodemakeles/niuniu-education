@@ -75,6 +75,7 @@ export interface ReadingResponse {
   completedAt?: string
   elapsedSeconds: number
   canFinish: boolean
+  debugMode?: boolean
 }
 
 export interface DictationItem {

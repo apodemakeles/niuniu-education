@@ -20,6 +20,23 @@ type Word struct {
 	DeletedAt      string `json:"-"`
 }
 
+// WordExample 是单词的 AI 学习例句。每词固定维护 3 条，displayOrder 为 0~2。
+type WordExample struct {
+	ID           string `json:"id"`
+	WordID       string `json:"wordId"`
+	Sentence     string `json:"sentence"`
+	DisplayOrder int    `json:"displayOrder"`
+	CreatedAt    string `json:"createdAt"`
+	UpdatedAt    string `json:"updatedAt"`
+}
+
+// ExampleTarget 是批量生成时所需的最小单词信息。
+type ExampleTarget struct {
+	WordID    string
+	Text      string
+	MeaningZh string
+}
+
 // 固定词库 ID（MVP 唯一词库，迁移脚本中预置）。
 const MainLibraryID = "main-library"
 

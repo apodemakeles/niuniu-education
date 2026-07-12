@@ -10,14 +10,14 @@ import (
 
 // DictationItem 是默写表的一行（序号 + 中文）。
 type DictationItem struct {
-	Index  int    `json:"index"`
+	Index   int    `json:"index"`
 	Meaning string `json:"meaning"`
 }
 
 // DictationPreview 是导出预览数据，供前端渲染默写表。
 type DictationPreview struct {
-	Title  string          `json:"title"`
-	Items  []DictationItem `json:"items"`
+	Title string          `json:"title"`
+	Items []DictationItem `json:"items"`
 }
 
 // scopeStatus 把导出范围映射到 status 值。

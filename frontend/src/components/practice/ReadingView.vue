@@ -84,7 +84,7 @@ function listenKeyWords() {
             ⏳ 还需阅读 {{ remaining }} 秒
           </div>
           <div class="kid-timer kid-timer-ready" v-else>
-            ✓ 已阅读够时间，可以完成了
+            ✓ {{ reading.debugMode ? '调试模式：可直接完成阅读' : '已阅读够时间，可以完成了' }}
           </div>
           <button class="primary-btn" type="button" :disabled="!canFinish" @click="emit('finish')">
             {{ canFinish ? '我读完短文了' : `继续阅读（还需 ${remaining} 秒）` }}

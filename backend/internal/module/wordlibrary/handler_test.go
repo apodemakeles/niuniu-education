@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/apodemakeles/niuniu-education/backend/internal/config"
+	"github.com/apodemakeles/niuniu-education/backend/internal/platform/llm"
 	"github.com/apodemakeles/niuniu-education/backend/internal/platform/ocr"
 )
 
@@ -23,7 +24,7 @@ func newTestHandler(t *testing.T) (*Handler, *config.Config) {
 	t.Helper()
 	db := newTestDB(t)
 	store := NewStore(db)
-	svc := NewService(store, ocr.NewMockProvider(), slog.Default())
+	svc := NewService(store, ocr.NewMockProvider(), llm.NewMockProvider(""), slog.Default())
 
 	// 临时数据目录，供 fs.SaveImage 使用，测试结束自动清理
 	tmpDir := t.TempDir()

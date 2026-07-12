@@ -215,7 +215,7 @@ frontend/
 
 ### 4.1 设计要点
 
-> **字段范围以原型为准**：单词仅保留原型出现的字段（英文、中文、音标、类型、状态）。PRD 中提到但原型未体现的概念（例句、难度、是否必背、修改记录等）一律**不纳入 MVP**，需要时随对应原型一起迭代。
+> **字段范围以原型为准**：单词主体保留原型出现的字段（英文、中文、音标、类型、状态）。例句已作为学习展示数据独立存入 `word_examples`；难度、是否必背、修改记录等仍不纳入 MVP，需要时随对应原型一起迭代。
 
 - **唯一词库**：MVP 只有 1 个词库。建 `libraries` 表仅为预留，不暴露给用户维护。
 - **学习状态**：由家长或后续学习系统维护；MVP 仅支持家长手动设置（与原型状态 pill 一致）。
@@ -559,6 +559,10 @@ export:
 image:
   retentionDays: 30       # OCR 原图保留天数（排查用）
 
+# 调试模式（正式给孩子用时应保持关闭）
+debug:
+  enabled: false          # true 时延伸阅读可跳过最短停留，立即完成
+
 # 是否启动时自动打开浏览器（指向前端地址，见 openBrowserUrl）
 openBrowser: true
 openBrowserUrl: "http://localhost:5173"
@@ -571,7 +575,7 @@ openBrowserUrl: "http://localhost:5173"
 | 来源 | 示例 |
 |------|------|
 | 参数 | `-data-dir /path -port 9000` |
-| 环境变量 | `NIUNIU_DATA_DIR`、`NIUNIU_PORT`、`NIUNIU_OCR_PROVIDER`、`NIUNIU_CORS_ALLOWED_ORIGINS` |
+| 环境变量 | `NIUNIU_DATA_DIR`、`NIUNIU_PORT`、`NIUNIU_OCR_PROVIDER`、`NIUNIU_CORS_ALLOWED_ORIGINS`、`NIUNIU_DEBUG` |
 | 配置文件 | `config.yaml` |
 
 ### 7.3 跨域（CORS）与本机部署

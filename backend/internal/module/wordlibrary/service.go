@@ -5,18 +5,20 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/apodemakeles/niuniu-education/backend/internal/platform/llm"
 	"github.com/apodemakeles/niuniu-education/backend/internal/platform/ocr"
 )
 
 // Service 承载单词库业务规则。M1 最小子集：导入相关。
 type Service struct {
-	store  *Store
-	ocr    ocr.Provider
-	logger *slog.Logger
+	store    *Store
+	ocr      ocr.Provider
+	examples *ExampleService
+	logger   *slog.Logger
 }
 
-func NewService(store *Store, ocrProvider ocr.Provider, logger *slog.Logger) *Service {
-	return &Service{store: store, ocr: ocrProvider, logger: logger}
+func NewService(store *Store, ocrProvider ocr.Provider, llmProvider llm.Provider, logger *slog.Logger) *Service {
+	return &Service{store: store, ocr: ocrProvider, examples: NewExampleService(store, llmProvider), logger: logger}
 }
 
 // RecognizeForDraft 调 OCR provider 生成草稿行（不入库），返回 DTO 与原始文本。
@@ -68,7 +70,7 @@ func (s *Service) ConfirmImport(ctx context.Context, req ConfirmImportRequest) (
 			continue
 		}
 		// 入库；易错词的“需强化”状态由 Store 写入 word_learning。
-		_, err = s.store.CreateWord(ctx, CreateWordParams{
+		w, err := s.store.CreateWord(ctx, CreateWordParams{
 			Text:      r.Text,
 			MeaningZh: r.MeaningZh,
 			Phonetic:  r.Phonetic,
@@ -81,7 +83,7 @@ func (s *Service) ConfirmImport(ctx context.Context, req ConfirmImportRequest) (
 			continue
 		}
 		resp.Added++
-		resp.Details = append(resp.Details, ImportResultDetail{RowID: rowID, Text: r.Text, Result: "added"})
+		resp.Details = append(resp.Details, ImportResultDetail{RowID: rowID, WordID: w.ID, Text: r.Text, Result: "added"})
 	}
 	return resp, nil
 }

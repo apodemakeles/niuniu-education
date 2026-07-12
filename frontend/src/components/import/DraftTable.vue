@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import type { DraftRow, ConfirmRow, ImportResult } from '@/types/draft'
 import { confirmImport } from '@/api/import'
+import { streamGenerateExamples } from '@/api/examples'
 
 const props = defineProps<{
   rows: DraftRow[]
@@ -15,6 +16,10 @@ const emit = defineEmits<{
 
 const submitting = ref(false)
 const error = ref<string | null>(null)
+const generationCurrent = ref(0)
+const generationTotal = ref(0)
+const generationWord = ref('')
+const generationFailed = ref(0)
 
 function removeRow(index: number) {
   props.rows.splice(index, 1)
@@ -50,6 +55,22 @@ async function onConfirm() {
   }
   try {
     const result = await confirmImport(validRows)
+    const addedIDs = result.details
+      .filter((detail) => detail.result === 'added' && detail.wordId)
+      .map((detail) => detail.wordId!)
+    if (addedIDs.length > 0) {
+      generationCurrent.value = 0
+      generationTotal.value = addedIDs.length
+      generationWord.value = ''
+      generationFailed.value = 0
+      await streamGenerateExamples('/examples/generate/stream', addedIDs,
+        (total) => { generationTotal.value = total },
+        (progress) => {
+          generationCurrent.value = progress.current
+          generationWord.value = progress.text || generationWord.value
+          if (progress.status === 'failed') generationFailed.value++
+        })
+    }
     emit('confirmed', result)
   } catch (e) {
     error.value = (e as Error).message
@@ -108,8 +129,14 @@ async function onConfirm() {
         取消
       </button>
       <button class="primary-btn" type="button" :disabled="submitting" @click="onConfirm">
-        {{ submitting ? '入库中…' : '确认入库' }}
+        {{ submitting ? (generationTotal ? `正在生成例句 ${generationCurrent}/${generationTotal}` : '确认入库中…') : '确认入库并生成例句' }}
       </button>
+    </div>
+
+    <div v-if="submitting && generationTotal" class="example-batch-progress" aria-live="polite">
+      <i class="example-spinner" aria-hidden="true"></i>
+      <div><strong>正在为新增词写例句</strong><span>{{ generationCurrent }}/{{ generationTotal }} {{ generationWord ? `· ${generationWord}` : '' }}</span></div>
+      <small v-if="generationFailed">已有 {{ generationFailed }} 个词生成失败，可在“编辑”中重试。</small>
     </div>
   </div>
 </template>

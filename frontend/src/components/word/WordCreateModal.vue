@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { createWord } from '@/api/words'
 import { ApiError } from '@/api/client'
 import type { Word, WordType } from '@/types/word'
+import WordExamplesPanel from './WordExamplesPanel.vue'
 
 const props = defineProps<{ defaultType?: WordType }>()
 const emit = defineEmits<{
@@ -17,6 +18,7 @@ const wordType = ref<WordType>(props.defaultType || 'new')
 const submitting = ref(false)
 const error = ref<string | null>(null)
 const pendingDuplicate = ref(false) // 当前录入命中重复，等待家长确认 force
+const createdWord = ref<Word | null>(null)
 
 async function submit(force = false) {
   if (!text.value.trim() || !meaningZh.value.trim()) {
@@ -32,11 +34,7 @@ async function submit(force = false) {
     )
     pendingDuplicate.value = false
     emit('created', w)
-    // 连续录入：清空表单，保留类型，聚焦到英文输入框
-    text.value = ''
-    meaningZh.value = ''
-    phonetic.value = ''
-    document.querySelector<HTMLInputElement>('input[data-field="create-text"]')?.focus()
+    createdWord.value = w
   } catch (e) {
     if (e instanceof ApiError && e.code === 'WORD_DUPLICATE') {
       pendingDuplicate.value = true
@@ -47,6 +45,15 @@ async function submit(force = false) {
   } finally {
     submitting.value = false
   }
+}
+
+function nextWord() {
+  createdWord.value = null
+  // 连续录入：清空表单，保留类型，聚焦到英文输入框
+    text.value = ''
+    meaningZh.value = ''
+    phonetic.value = ''
+    document.querySelector<HTMLInputElement>('input[data-field="create-text"]')?.focus()
 }
 
 // 回车保存并继续
@@ -64,7 +71,19 @@ function onEnter() {
         <p>保存后不关闭窗口，方便连续录入。回车可快速保存下一个。</p>
       </div>
 
-      <form class="form-grid" @submit.prevent="onEnter">
+      <div v-if="createdWord" class="created-example-state">
+        <div class="modal-title">
+          <h2>已保存 {{ createdWord.text }}</h2>
+          <p>正在为这个词准备 3 个可直接学习的例句。</p>
+        </div>
+        <WordExamplesPanel :word-id="createdWord.id" auto-generate />
+        <div class="form-actions">
+          <button class="secondary-btn" type="button" @click="emit('closed')">完成</button>
+          <button class="primary-btn" type="button" @click="nextWord">继续录入下一个</button>
+        </div>
+      </div>
+
+      <form v-else class="form-grid" @submit.prevent="onEnter">
         <div class="field">
           <label>英文单词</label>
           <input v-model="text" data-testid="create-text" required />
@@ -92,7 +111,7 @@ function onEnter() {
         <div class="form-actions full">
           <button class="secondary-btn" type="button" :disabled="submitting" @click="emit('closed')">完成</button>
           <button class="primary-btn" type="submit" :disabled="submitting">
-            {{ submitting ? '保存中…' : pendingDuplicate ? '仍然新增' : '保存并继续' }}
+            {{ submitting ? '保存中…' : pendingDuplicate ? '仍然新增并生成例句' : '保存并生成例句' }}
           </button>
         </div>
       </form>

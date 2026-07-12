@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/apodemakeles/niuniu-education/backend/internal/platform/llm"
 )
@@ -319,6 +320,23 @@ func TestE2E_CheckinStreak(t *testing.T) {
 	}
 }
 
+func TestBuildCardDetail_UsesGeneratedExample(t *testing.T) {
+	svc, store := newTestService(t)
+	ctx := ctxbg()
+	seedWord(t, store.db, "w-example", "kitchen", "厨房", "", "new", StatusUnlearned)
+	if _, err := store.db.Exec(`INSERT INTO word_examples(id, word_id, sentence, display_order) VALUES ('ex-1', 'w-example', 'I eat in the kitchen.', 0)`); err != nil {
+		t.Fatal(err)
+	}
+	tasks := []DailyTask{{ID: "task-example", WordID: "w-example", TaskDate: Today(), PoolType: PoolFirst}}
+	card, err := svc.buildCardDetail(ctx, tasks, "w-example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if card.Example != "I eat in the kitchen." || card.ExampleMissing {
+		t.Fatalf("应展示已生成例句，got %+v", card)
+	}
+}
+
 // TestE2E_ReadingFlowWithMockLLM 阅读生成（mock LLM 返回合格短文）。
 func TestE2E_ReadingFlowWithMockLLM(t *testing.T) {
 	db := newTestDB(t)
@@ -366,6 +384,40 @@ func TestE2E_ReadingFlowWithMockLLM(t *testing.T) {
 		if ap.Count != 2 {
 			t.Fatalf("词 %s 出现 %d 次，应恰好为2", ap.ID, ap.Count)
 		}
+	}
+}
+
+// TestDebugMode_SkipReadingWait 调试模式下可立即完成阅读，无需等满 minSeconds。
+func TestDebugMode_SkipReadingWait(t *testing.T) {
+	svc, store := newTestService(t)
+	date := Today()
+	now := time.Now().UTC().Format(time.RFC3339)
+	p := ReadingPassage{
+		TaskDate:           date,
+		ReadingTitle:       "Debug Story",
+		ReadingText:        "hello world",
+		AIGenerationStatus: ReadingSuccess,
+		ReadingMinSeconds:  120,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+	}
+	p.ReadingStartedAt.Valid = true
+	p.ReadingStartedAt.String = now
+	if err := store.UpsertReading(context.Background(), p); err != nil {
+		t.Fatalf("seed reading: %v", err)
+	}
+
+	if err := svc.CompleteReading(context.Background()); err != ErrReadingTooShort {
+		t.Fatalf("未开调试时期望 ErrReadingTooShort，got %v", err)
+	}
+
+	svc.SetDebugMode(true)
+	rr := svc.buildReadingResponse(p)
+	if !rr.DebugMode || !rr.CanFinish {
+		t.Fatalf("调试模式响应应可完成: debug=%v canFinish=%v", rr.DebugMode, rr.CanFinish)
+	}
+	if err := svc.CompleteReading(context.Background()); err != nil {
+		t.Fatalf("调试模式应允许立即完成阅读: %v", err)
 	}
 }
 

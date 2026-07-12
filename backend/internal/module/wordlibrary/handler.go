@@ -46,12 +46,116 @@ func (h *Handler) Register(r Router) {
 	r.Post("/words", h.handleCreateWord)
 	r.Put("/words/{id}", h.handleUpdateWord)
 	r.Delete("/words/{id}", h.handleDeleteWord)
+	r.Get("/words/{id}/examples", h.handleListExamples)
+	r.Post("/words/{id}/examples/generate", h.handleGenerateExamples)
+	r.Post("/words/{id}/examples/{exampleId}/regenerate", h.handleRegenerateExample)
+	r.Post("/examples/generate/stream", h.handleGenerateExamplesStream)
+	r.Post("/examples/backfill/stream", h.handleBackfillExamplesStream)
 	r.Post("/imports/parse", h.handleImportParse)
 	r.Post("/imports/ocr", h.handleImportOCR)
 	r.Post("/imports/ocr/stream", h.handleImportOCRStream)
 	r.Post("/imports/confirm", h.handleConfirmImport)
 	r.Post("/exports/dictation:preview", h.handleExportPreview)
 	r.Post("/exports/dictation", h.handleExportDoc)
+}
+
+func (h *Handler) handleListExamples(w http.ResponseWriter, r *http.Request) {
+	examples, err := h.store.ListExamples(r.Context(), r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", "读取例句失败")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"examples": examples})
+}
+
+func (h *Handler) handleGenerateExamples(w http.ResponseWriter, r *http.Request) {
+	examples, err := h.svc.examples.GenerateForWord(r.Context(), r.PathValue("id"))
+	if err != nil {
+		if err == ErrNotFound {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "单词不存在")
+			return
+		}
+		h.logger.Warn("generate word examples", slog.Any("err", err), slog.String("word_id", r.PathValue("id")))
+		writeError(w, http.StatusBadGateway, "EXAMPLE_GENERATION_ERROR", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"examples": examples})
+}
+
+func (h *Handler) handleRegenerateExample(w http.ResponseWriter, r *http.Request) {
+	example, err := h.svc.examples.RegenerateOne(r.Context(), r.PathValue("id"), r.PathValue("exampleId"))
+	if err != nil {
+		if err == ErrNotFound {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "例句不存在")
+			return
+		}
+		h.logger.Warn("regenerate word example", slog.Any("err", err), slog.String("word_id", r.PathValue("id")))
+		writeError(w, http.StatusBadGateway, "EXAMPLE_GENERATION_ERROR", err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, example)
+}
+
+func (h *Handler) handleGenerateExamplesStream(w http.ResponseWriter, r *http.Request) {
+	var req GenerateExamplesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.WordIDs) == 0 {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "缺少需要生成例句的单词")
+		return
+	}
+	h.streamExamples(w, r, uniqueStrings(req.WordIDs))
+}
+
+func (h *Handler) handleBackfillExamplesStream(w http.ResponseWriter, r *http.Request) {
+	targets, err := h.store.ListMissingExampleTargets(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", "读取待补全单词失败")
+		return
+	}
+	ids := make([]string, 0, len(targets))
+	for _, target := range targets {
+		ids = append(ids, target.WordID)
+	}
+	h.streamExamples(w, r, ids)
+}
+
+func (h *Handler) streamExamples(w http.ResponseWriter, r *http.Request, wordIDs []string) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	writeSSE(w, "start", map[string]any{"total": len(wordIDs)})
+
+	for i, wordID := range wordIDs {
+		if err := r.Context().Err(); err != nil {
+			return
+		}
+		word, err := h.store.Get(r.Context(), wordID)
+		if err != nil {
+			writeSSE(w, "progress", map[string]any{"current": i + 1, "total": len(wordIDs), "wordId": wordID, "status": "failed", "message": "单词不存在"})
+			continue
+		}
+		writeSSE(w, "progress", map[string]any{"current": i + 1, "total": len(wordIDs), "wordId": wordID, "text": word.Text, "status": "generating"})
+		_, err = h.svc.examples.GenerateForWord(r.Context(), wordID)
+		if err != nil {
+			h.logger.Warn("batch generate examples", slog.Any("err", err), slog.String("word_id", wordID))
+			writeSSE(w, "progress", map[string]any{"current": i + 1, "total": len(wordIDs), "wordId": wordID, "text": word.Text, "status": "failed", "message": err.Error()})
+			continue
+		}
+		writeSSE(w, "progress", map[string]any{"current": i + 1, "total": len(wordIDs), "wordId": wordID, "text": word.Text, "status": "success"})
+	}
+	writeSSE(w, "done", map[string]any{"total": len(wordIDs)})
+}
+
+func uniqueStrings(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value != "" && !seen[value] {
+			seen[value] = true
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 // RegisterTestEndpoints 注册仅测试用的端点（物理清空库等）。

@@ -91,7 +91,7 @@ async function onSubmit(answers: SubmitAnswer[]) {
   const resp = await store.submit(answers)
   if (resp) {
     submitted.value = true
-    bonusIds.value = resp.bonusIds
+    bonusIds.value = resp.bonusIds ?? []
     const wrong = resp.wrong + resp.blank
     if (wrong === 0) {
       correctionRequested.value = false

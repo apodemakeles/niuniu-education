@@ -62,4 +62,20 @@ describe('ReadingView 阅读计时', () => {
     expect(wrapper.text()).toContain('还需阅读 20 秒')
     expect(wrapper.find('button.primary-btn').attributes('disabled')).toBeDefined()
   })
+
+  it('调试模式下服务端 canFinish 时立即开放完成按钮', async () => {
+    const wrapper = mount(ReadingView, {
+      props: {
+        reading: {
+          ...reading(0),
+          canFinish: true,
+          debugMode: true,
+        },
+        active: true,
+      },
+    })
+
+    expect(wrapper.text()).toContain('调试模式：可直接完成阅读')
+    expect(wrapper.find('button.primary-btn').attributes('disabled')).toBeUndefined()
+  })
 })
