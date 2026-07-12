@@ -10,9 +10,9 @@ import (
 
 // Service 承载单词库业务规则。M1 最小子集：导入相关。
 type Service struct {
-	store    *Store
-	ocr      ocr.Provider
-	logger   *slog.Logger
+	store  *Store
+	ocr    ocr.Provider
+	logger *slog.Logger
 }
 
 func NewService(store *Store, ocrProvider ocr.Provider, logger *slog.Logger) *Service {
@@ -33,6 +33,7 @@ func (s *Service) RecognizeForDraft(ctx context.Context, image []byte, mimeType 
 //   - "apple 苹果"            （空格分隔）
 //   - "apple,苹果,/ˈæpl/"     （逗号分隔）
 //   - "apple /ˈæpl/ 苹果"     （含音标）
+//
 // 复用 ocr.ParseOCRText（它已支持这些分隔格式），只是不经过 OCR。
 func (s *Service) ParsePasteForDraft(text string) []DraftRowDTO {
 	rows := ocr.ParseOCRText(text)
@@ -44,7 +45,7 @@ func (s *Service) ParsePasteForDraft(text string) []DraftRowDTO {
 // 规则（对齐 PRD "确认入库前的校验"）：
 //   - 英文单词为空：标记 invalid，不入库
 //   - 重复（text+meaningZh 命中已存在记录）：默认跳过（skipped）
-//   - 其余按类型设默认状态后写入：new→unlearned, mistake→reinforce
+//   - 新词保持未学；明确标为易错词的条目会建立“需强化”学习记录
 func (s *Service) ConfirmImport(ctx context.Context, req ConfirmImportRequest) (*ImportResultResponse, error) {
 	resp := &ImportResultResponse{Details: []ImportResultDetail{}}
 
@@ -66,7 +67,7 @@ func (s *Service) ConfirmImport(ctx context.Context, req ConfirmImportRequest) (
 			resp.Details = append(resp.Details, ImportResultDetail{RowID: rowID, Text: r.Text, Result: "skipped", Reason: "词库内已存在"})
 			continue
 		}
-		// 入库，状态按类型设定
+		// 入库；易错词的“需强化”状态由 Store 写入 word_learning。
 		_, err = s.store.CreateWord(ctx, CreateWordParams{
 			Text:      r.Text,
 			MeaningZh: r.MeaningZh,

@@ -4,12 +4,12 @@ import "github.com/apodemakeles/niuniu-education/backend/internal/platform/ocr"
 
 // DraftRowDTO 是草稿行，对齐前端 DraftRow 与架构文档 §5.3。
 type DraftRowDTO struct {
-	RowID      string  `json:"rowId"`
-	Text       string  `json:"text"`
-	MeaningZh  string  `json:"meaningZh"`
-	Phonetic   string  `json:"phonetic"`
-	WordType   string  `json:"wordType"`
-	Confidence float64 `json:"confidence"`
+	RowID      string   `json:"rowId"`
+	Text       string   `json:"text"`
+	MeaningZh  string   `json:"meaningZh"`
+	Phonetic   string   `json:"phonetic"`
+	WordType   string   `json:"wordType"`
+	Confidence float64  `json:"confidence"`
 	Issues     []string `json:"issues,omitempty"` // low_confidence / missing_meaning / duplicate
 }
 
@@ -43,9 +43,9 @@ type ImportResultDetail struct {
 
 // ImportResultResponse 是 /imports/confirm 的响应。
 type ImportResultResponse struct {
-	Added   int                 `json:"added"`
-	Skipped int                 `json:"skipped"`
-	Invalid int                 `json:"invalid"`
+	Added   int                  `json:"added"`
+	Skipped int                  `json:"skipped"`
+	Invalid int                  `json:"invalid"`
 	Details []ImportResultDetail `json:"details"`
 }
 
@@ -101,7 +101,6 @@ type UpdateWordRequest struct {
 	MeaningZh string `json:"meaningZh"`
 	Phonetic  string `json:"phonetic"`
 	WordType  string `json:"wordType"`
-	Status    string `json:"status"`
 }
 
 // DeleteWordResponse 是删除单词的响应。

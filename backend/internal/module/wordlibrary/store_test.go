@@ -33,6 +33,15 @@ func newTestDB(t *testing.T) *sql.DB {
 	);
 	CREATE UNIQUE INDEX uniq_word_text_meaning ON words(library_id, text, meaning_zh) WHERE deleted_at IS NULL;
 	CREATE INDEX idx_words_type_status ON words(library_id, word_type, status) WHERE deleted_at IS NULL;
+	CREATE TABLE word_learning (
+		word_id TEXT PRIMARY KEY REFERENCES words(id) ON DELETE CASCADE,
+		library_id TEXT NOT NULL DEFAULT 'main-library',
+		learning_status TEXT NOT NULL DEFAULT 'unlearned'
+			CHECK (learning_status IN ('unlearned','learning','reinforce','mastered')),
+		success_count INTEGER NOT NULL DEFAULT 0,
+		next_due_date TEXT,
+		updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+	);
 	CREATE TABLE import_images (
 		id TEXT PRIMARY KEY, library_id TEXT NOT NULL, file_path TEXT NOT NULL, mime_type TEXT NOT NULL,
 		uploaded_at TEXT NOT NULL DEFAULT (datetime('now')), ocr_raw_text TEXT, provider TEXT,
@@ -46,7 +55,7 @@ func newTestDB(t *testing.T) *sql.DB {
 	return db
 }
 
-// TestCreateWord_DefaultStatus 验证按原型规则：新词默认 unlearned，易错词默认 reinforce。
+// TestCreateWord_DefaultStatus 验证新词默认未学，逐个录入的易错词立即进入需强化复习。
 func TestCreateWord_DefaultStatus(t *testing.T) {
 	store := NewStore(newTestDB(t))
 	ctx := context.Background()
@@ -72,6 +81,15 @@ func TestCreateWord_DefaultStatus(t *testing.T) {
 			}
 			if w.ID == "" {
 				t.Error("ID 未生成")
+			}
+			if c.wordType == TypeMistake {
+				var status, due string
+				if err := store.db.QueryRowContext(ctx, `SELECT learning_status, next_due_date FROM word_learning WHERE word_id=?`, w.ID).Scan(&status, &due); err != nil {
+					t.Fatalf("易错词应创建学习记录: %v", err)
+				}
+				if status != StatusReinforce || due == "" {
+					t.Errorf("易错词学习记录 = status:%q due:%q, want reinforce with due date", status, due)
+				}
 			}
 		})
 	}
@@ -151,6 +169,12 @@ func TestList_Filters(t *testing.T) {
 		t.Errorf("type=new = %d, want 2", got)
 	}
 
+	// status 筛选读取 word_learning，而非旧 words.status。
+	reinforceOnly, _ := store.List(ctx, ListParams{Status: StatusReinforce})
+	if len(reinforceOnly.Words) != 1 || reinforceOnly.Words[0].Text != "read" {
+		t.Errorf("status=reinforce = %+v, want read", reinforceOnly.Words)
+	}
+
 	// 搜索 q（前缀匹配 text）
 	apple, _ := store.List(ctx, ListParams{Q: "app"})
 	if len(apple.Words) != 1 || apple.Words[0].Text != "apple" {
@@ -179,12 +203,12 @@ func TestUpdate_ChangesFieldsNotText(t *testing.T) {
 	w, _ := store.CreateWord(ctx, CreateWordParams{Text: "apple", MeaningZh: "苹果", WordType: TypeNew})
 
 	updated, err := store.Update(ctx, UpdateParams{
-		ID: w.ID, MeaningZh: "苹果果", Phonetic: "/ˈæpl/", WordType: TypeMistake, Status: StatusReinforce,
+		ID: w.ID, MeaningZh: "苹果果", Phonetic: "/ˈæpl/", WordType: TypeMistake,
 	})
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	if updated.MeaningZh != "苹果果" || updated.WordType != TypeMistake || updated.Status != StatusReinforce {
+	if updated.MeaningZh != "苹果果" || updated.WordType != TypeMistake || updated.Status != StatusUnlearned {
 		t.Errorf("更新后字段不符: %+v", updated)
 	}
 	if updated.Text != "apple" {
@@ -192,6 +216,36 @@ func TestUpdate_ChangesFieldsNotText(t *testing.T) {
 	}
 	if updated.LastEditedAt == "" {
 		t.Error("last_edited_at 应被刷新")
+	}
+}
+
+// TestList_UsesLearningStatus 学习任务更新状态后，词库展示和筛选立即采用同一记录。
+func TestList_UsesLearningStatus(t *testing.T) {
+	db := newTestDB(t)
+	store := NewStore(db)
+	ctx := context.Background()
+	w, err := store.CreateWord(ctx, CreateWordParams{Text: "apple", MeaningZh: "苹果", WordType: TypeNew})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 故意写入相反的旧字段，验证它不会污染家长端展示。
+	if _, err := db.ExecContext(ctx, `UPDATE words SET status=? WHERE id=?`, StatusMastered, w.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO word_learning(word_id, library_id, learning_status, next_due_date) VALUES (?, ?, ?, date('now'))`, w.ID, MainLibraryID, StatusReinforce); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := store.List(ctx, ListParams{Status: StatusReinforce})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Words) != 1 || got.Words[0].Status != StatusReinforce {
+		t.Errorf("有效状态应来自 word_learning，got %+v", got.Words)
+	}
+	legacy, _ := store.List(ctx, ListParams{Status: StatusMastered})
+	if len(legacy.Words) != 0 {
+		t.Errorf("旧 words.status 不应参与筛选，got %+v", legacy.Words)
 	}
 }
 
@@ -233,9 +287,7 @@ func TestDelete_PhysicalForUnlearned(t *testing.T) {
 func TestDelete_LogicalForLearned(t *testing.T) {
 	store := NewStore(newTestDB(t))
 	ctx := context.Background()
-	w, _ := store.CreateWord(ctx, CreateWordParams{Text: "apple", MeaningZh: "苹果"})
-	// 改为学习中
-	_, _ = store.Update(ctx, UpdateParams{ID: w.ID, MeaningZh: "苹果", WordType: TypeNew, Status: StatusLearning})
+	w, _ := store.CreateWord(ctx, CreateWordParams{Text: "apple", MeaningZh: "苹果", WordType: TypeMistake})
 
 	res, err := store.Delete(ctx, w.ID)
 	if err != nil {

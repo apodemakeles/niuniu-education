@@ -1,5 +1,5 @@
 import { request } from './client'
-import type { Word, WordType, WordStatus } from '@/types/word'
+import type { Word, WordType } from '@/types/word'
 
 export interface LibraryStats {
   total: number
@@ -77,7 +77,6 @@ export function updateWord(id: string, input: {
   meaningZh: string
   phonetic: string
   wordType: WordType
-  status: WordStatus
 }): Promise<Word> {
   return request<Word>(`/words/${id}`, {
     method: 'PUT',

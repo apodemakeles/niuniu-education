@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 )
 
 // Store 封装 words 表的数据访问。M1 最小子集，供导入流程与列表查询使用。
@@ -28,19 +29,32 @@ type ListResult struct {
 	Total int
 }
 
+// 学习状态只从 word_learning 读取；尚未建立学习记录的词按“未学”展示。
+// words.status 保留仅为旧库兼容字段，不能再作为业务判断依据。
+const effectiveStatusExpr = `COALESCE(wl.learning_status, 'unlearned')`
+
+const wordSelectColumns = `w.id, w.library_id, w.text, w.meaning_zh, w.phonetic, w.word_type, ` + effectiveStatusExpr + `,
+	w.created_at, w.updated_at, w.last_edited_at, w.source`
+
+const wordLearningJoin = ` LEFT JOIN word_learning wl ON wl.word_id = w.id AND wl.library_id = w.library_id`
+
+type rowQuerier interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
+
 func (s *Store) buildListWhere(p ListParams) (string, []any) {
-	clause := `deleted_at IS NULL AND library_id = ?`
+	clause := `w.deleted_at IS NULL AND w.library_id = ?`
 	args := []any{MainLibraryID}
 	if p.Type == TypeNew || p.Type == TypeMistake {
-		clause += ` AND word_type = ?`
+		clause += ` AND w.word_type = ?`
 		args = append(args, p.Type)
 	}
 	if p.Status != "" && p.Status != "all" {
-		clause += ` AND status = ?`
+		clause += ` AND ` + effectiveStatusExpr + ` = ?`
 		args = append(args, p.Status)
 	}
 	if p.Q != "" {
-		clause += ` AND (text LIKE ? OR meaning_zh LIKE ? OR phonetic LIKE ?)`
+		clause += ` AND (w.text LIKE ? OR w.meaning_zh LIKE ? OR w.phonetic LIKE ?)`
 		like := p.Q + "%"
 		args = append(args, like, like, like)
 	}
@@ -69,15 +83,13 @@ func (s *Store) List(ctx context.Context, p ListParams) (ListResult, error) {
 	clause, args := s.buildListWhere(p)
 
 	var total int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM words WHERE `+clause, args...).
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM words w`+wordLearningJoin+` WHERE `+clause, args...).
 		Scan(&total); err != nil {
 		return ListResult{}, fmt.Errorf("count words: %w", err)
 	}
 
-	q := `SELECT id, library_id, text, meaning_zh, phonetic, word_type, status,
-	             created_at, updated_at, last_edited_at, source
-	      FROM words
-	      WHERE ` + clause + ` ORDER BY created_at DESC`
+	q := `SELECT ` + wordSelectColumns + ` FROM words w` + wordLearningJoin + `
+	      WHERE ` + clause + ` ORDER BY w.created_at DESC`
 
 	queryArgs := append([]any{}, args...)
 	if p.PageSize > 0 {
@@ -101,8 +113,7 @@ func (s *Store) List(ctx context.Context, p ListParams) (ListResult, error) {
 	for rows.Next() {
 		var w Word
 		var lastEdited sql.NullString
-		if err := rows.Scan(&w.ID, &w.LibraryID, &w.Text, &w.MeaningZh, &w.Phonetic,
-			&w.WordType, &w.Status, &w.CreatedAt, &w.UpdatedAt, &lastEdited, &w.Source); err != nil {
+		if err := scanWord(rows, &w, &lastEdited); err != nil {
 			return ListResult{}, fmt.Errorf("scan word: %w", err)
 		}
 		w.LastEditedAt = lastEdited.String
@@ -120,7 +131,6 @@ type CreateWordParams struct {
 	MeaningZh string
 	Phonetic  string
 	WordType  string
-	Status    string
 	Source    string
 }
 
@@ -129,35 +139,63 @@ func (s *Store) CreateWord(ctx context.Context, p CreateWordParams) (Word, error
 	if p.WordType == "" {
 		p.WordType = TypeNew
 	}
-	if p.Status == "" {
-		p.Status = DefaultStatusForType(p.WordType)
-	}
 	if p.Source == "" {
 		p.Source = SourceManual
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Word{}, fmt.Errorf("begin create word: %w", err)
+	}
+	defer tx.Rollback()
+
 	q := `INSERT INTO words (id, library_id, text, meaning_zh, phonetic, word_type, status, source)
 	      VALUES (lower(hex(randomblob(8))), ?, ?, ?, ?, ?, ?, ?)`
-	res, err := s.db.ExecContext(ctx, q, MainLibraryID, p.Text, p.MeaningZh, p.Phonetic, p.WordType, p.Status, p.Source)
+	// 新的学习状态写入 word_learning；此处旧字段固定为未学，仅兼容历史表结构。
+	res, err := tx.ExecContext(ctx, q, MainLibraryID, p.Text, p.MeaningZh, p.Phonetic, p.WordType, StatusUnlearned, p.Source)
 	if err != nil {
 		return Word{}, fmt.Errorf("insert word: %w", err)
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return Word{}, fmt.Errorf("insert word: 未写入")
 	}
-	// 查回插入行（含生成 id 与时间戳）
-	return s.findByTextMeaning(ctx, p.Text, p.MeaningZh)
+	w, err := findByTextMeaning(ctx, tx, p.Text, p.MeaningZh)
+	if err != nil {
+		return Word{}, err
+	}
+	if p.WordType == TypeMistake {
+		// 逐个录入/导入时主动选择“易错词”，即明确要求从“需强化”开始复习。
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO word_learning(word_id, library_id, learning_status, next_due_date)
+			VALUES (?, ?, ?, ?)
+			ON CONFLICT(word_id) DO UPDATE SET
+				learning_status=excluded.learning_status,
+				next_due_date=excluded.next_due_date,
+				updated_at=datetime('now')`,
+			w.ID, MainLibraryID, StatusReinforce, time.Now().Format("2006-01-02")); err != nil {
+			return Word{}, fmt.Errorf("mark manually entered mistake word: %w", err)
+		}
+	}
+	w, err = getWord(ctx, tx, w.ID)
+	if err != nil {
+		return Word{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Word{}, fmt.Errorf("commit create word: %w", err)
+	}
+	return w, nil
 }
 
 func (s *Store) findByTextMeaning(ctx context.Context, text, meaning string) (Word, error) {
-	q := `SELECT id, library_id, text, meaning_zh, phonetic, word_type, status,
-	             created_at, updated_at, last_edited_at, source
-	      FROM words WHERE library_id=? AND text=? AND meaning_zh=? AND deleted_at IS NULL
-	      ORDER BY created_at DESC LIMIT 1`
+	return findByTextMeaning(ctx, s.db, text, meaning)
+}
+
+func findByTextMeaning(ctx context.Context, q rowQuerier, text, meaning string) (Word, error) {
+	query := `SELECT ` + wordSelectColumns + ` FROM words w` + wordLearningJoin + `
+		WHERE w.library_id=? AND w.text=? AND w.meaning_zh=? AND w.deleted_at IS NULL
+		ORDER BY w.created_at DESC LIMIT 1`
 	var w Word
 	var lastEdited sql.NullString
-	err := s.db.QueryRowContext(ctx, q, MainLibraryID, text, meaning).
-		Scan(&w.ID, &w.LibraryID, &w.Text, &w.MeaningZh, &w.Phonetic, &w.WordType, &w.Status,
-			&w.CreatedAt, &w.UpdatedAt, &lastEdited, &w.Source)
+	err := scanWord(q.QueryRowContext(ctx, query, MainLibraryID, text, meaning), &w, &lastEdited)
 	if err != nil {
 		return Word{}, fmt.Errorf("find word after insert: %w", err)
 	}
@@ -188,14 +226,14 @@ func (s *Store) ResetAll(ctx context.Context) error {
 
 // Get 按 ID 查询单个单词（未软删）。
 func (s *Store) Get(ctx context.Context, id string) (Word, error) {
-	q := `SELECT id, library_id, text, meaning_zh, phonetic, word_type, status,
-	             created_at, updated_at, last_edited_at, source
-	      FROM words WHERE id=? AND deleted_at IS NULL`
+	return getWord(ctx, s.db, id)
+}
+
+func getWord(ctx context.Context, q rowQuerier, id string) (Word, error) {
+	query := `SELECT ` + wordSelectColumns + ` FROM words w` + wordLearningJoin + ` WHERE w.id=? AND w.deleted_at IS NULL`
 	var w Word
 	var lastEdited sql.NullString
-	err := s.db.QueryRowContext(ctx, q, id).
-		Scan(&w.ID, &w.LibraryID, &w.Text, &w.MeaningZh, &w.Phonetic, &w.WordType, &w.Status,
-			&w.CreatedAt, &w.UpdatedAt, &lastEdited, &w.Source)
+	err := scanWord(q.QueryRowContext(ctx, query, id), &w, &lastEdited)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return Word{}, ErrNotFound
@@ -206,22 +244,25 @@ func (s *Store) Get(ctx context.Context, id string) (Word, error) {
 	return w, nil
 }
 
-// UpdateParams 更新单词属性（不含 text，PRD：英文单词创建后不可改）。
-type UpdateParams struct {
-	ID         string
-	MeaningZh  string
-	Phonetic   string
-	WordType   string
-	Status     string
+func scanWord(row interface{ Scan(...any) error }, w *Word, lastEdited *sql.NullString) error {
+	return row.Scan(&w.ID, &w.LibraryID, &w.Text, &w.MeaningZh, &w.Phonetic,
+		&w.WordType, &w.Status, &w.CreatedAt, &w.UpdatedAt, lastEdited, &w.Source)
 }
 
-// Update 更新单词属性。普通字段修改不重置学习进度（不触碰 review_count 等）。
-// 若 wordType 改为易错词，status 不自动重置（按原型行为，交由家长在表单里设）。
+// UpdateParams 更新单词属性（不含 text，PRD：英文单词创建后不可改）。
+type UpdateParams struct {
+	ID        string
+	MeaningZh string
+	Phonetic  string
+	WordType  string
+}
+
+// Update 只更新词条属性；学习状态只能由学习任务或创建时的“易错词”意图写入。
 func (s *Store) Update(ctx context.Context, p UpdateParams) (Word, error) {
 	q := `UPDATE words
-	      SET meaning_zh=?, phonetic=?, word_type=?, status=?, last_edited_at=datetime('now'), updated_at=datetime('now')
+	      SET meaning_zh=?, phonetic=?, word_type=?, last_edited_at=datetime('now'), updated_at=datetime('now')
 	      WHERE id=? AND deleted_at IS NULL`
-	res, err := s.db.ExecContext(ctx, q, p.MeaningZh, p.Phonetic, p.WordType, p.Status, p.ID)
+	res, err := s.db.ExecContext(ctx, q, p.MeaningZh, p.Phonetic, p.WordType, p.ID)
 	if err != nil {
 		return Word{}, fmt.Errorf("update word: %w", err)
 	}

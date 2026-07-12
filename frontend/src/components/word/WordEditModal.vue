@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { updateWord } from '@/api/words'
-import type { Word, WordType, WordStatus } from '@/types/word'
+import type { Word, WordType } from '@/types/word'
 
 const props = defineProps<{ word: Word }>()
 const emit = defineEmits<{
@@ -12,7 +12,6 @@ const emit = defineEmits<{
 const meaningZh = ref(props.word.meaningZh)
 const phonetic = ref(props.word.phonetic)
 const wordType = ref<WordType>(props.word.wordType)
-const status = ref<WordStatus>(props.word.status)
 const submitting = ref(false)
 const error = ref<string | null>(null)
 
@@ -21,7 +20,6 @@ watch(() => props.word, (w) => {
   meaningZh.value = w.meaningZh
   phonetic.value = w.phonetic
   wordType.value = w.wordType
-  status.value = w.status
 })
 
 async function onSave() {
@@ -32,7 +30,6 @@ async function onSave() {
       meaningZh: meaningZh.value.trim(),
       phonetic: phonetic.value.trim(),
       wordType: wordType.value,
-      status: status.value,
     })
     emit('saved', updated)
   } catch (e) {
@@ -72,15 +69,7 @@ async function onSave() {
             <option value="mistake">易错词</option>
           </select>
         </div>
-        <div class="field">
-          <label>状态</label>
-          <select v-model="status">
-            <option value="unlearned">未学</option>
-            <option value="learning">学习中</option>
-            <option value="reinforce">需强化</option>
-            <option value="mastered">已掌握</option>
-          </select>
-        </div>
+        <p class="note full">学习状态由孩子的实际学习结果自动记录，编辑词条不会改变它。</p>
 
         <p v-if="error" class="note error full">{{ error }}</p>
 

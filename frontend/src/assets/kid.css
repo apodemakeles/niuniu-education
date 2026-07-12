@@ -1,0 +1,1253 @@
+/* kid.css —— 学生端背单词任务前台卡通风样式。
+ * 与家长端 main.css 完全隔离：所有规则限定在 .kid-app 作用域下，
+ * CSS 变量用 --kid- 前缀，不污染家长端。
+ * 视觉对齐 design/prototype/student-word-task/styles.css。
+ */
+
+.kid-app {
+  --kid-ink: #30304f;
+  --kid-muted: #6c6c91;
+  --kid-paper: #fff7d8;
+  --kid-panel: #fffdf4;
+  --kid-line: #30304f;
+  --kid-mint: #63d7a1;
+  --kid-mint-dark: #2e9468;
+  --kid-pink: #ff7aa8;
+  --kid-peach: #ffb36b;
+  --kid-banana: #ffe36e;
+  --kid-sky: #76c7ff;
+  --kid-lavender: #b9a7ff;
+  --kid-red: #ff6b5f;
+  --kid-shadow: 0 10px 0 rgba(48, 48, 79, 0.18);
+  --kid-soft-shadow: 0 18px 42px rgba(48, 48, 79, 0.16);
+  --kid-radius: 24px;
+
+  box-sizing: border-box;
+  color: var(--kid-ink);
+  /* 学生端糖果色背景：覆盖家长端纸感底纹 */
+  background:
+    radial-gradient(circle at 8% 16%, rgba(255, 122, 168, 0.3) 0 70px, transparent 72px),
+    radial-gradient(circle at 86% 10%, rgba(118, 199, 255, 0.32) 0 92px, transparent 94px),
+    radial-gradient(circle at 78% 82%, rgba(99, 215, 161, 0.28) 0 110px, transparent 112px),
+    linear-gradient(45deg, rgba(255, 227, 110, 0.34) 25%, transparent 25%),
+    var(--kid-paper);
+  background-size: auto, auto, auto, 34px 34px, auto;
+  font-family: 'Comic Sans MS', 'Trebuchet MS', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  min-height: 100vh;
+}
+
+.kid-app *,
+.kid-app *::before,
+.kid-app *::after {
+  box-sizing: border-box;
+}
+
+.kid-app [hidden] {
+  display: none !important;
+}
+
+.kid-app button,
+.kid-app input {
+  font: inherit;
+}
+
+.kid-app button {
+  cursor: pointer;
+}
+
+.kid-app button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.kid-container {
+  width: min(1180px, 100%);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 28px;
+}
+
+/* 顶栏 */
+.kid-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.kid-eyebrow,
+.kid-app .small-label {
+  margin: 0 0 6px;
+  color: var(--kid-pink);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.kid-app h1 {
+  margin: 0;
+  font-size: 40px;
+  text-shadow: 3px 3px 0 white;
+}
+
+.kid-app h2 {
+  margin: 0 0 10px;
+  font-size: 26px;
+}
+
+.kid-app h3 {
+  margin: 0 0 10px;
+  font-size: 18px;
+}
+
+.kid-date-card,
+.kid-hero-panel,
+.kid-queue-panel,
+.kid-word-card,
+.kid-reading-panel,
+.kid-dictation-panel,
+.kid-done-panel {
+  background: var(--kid-panel);
+  border: 3px solid var(--kid-line);
+  border-radius: var(--kid-radius);
+  box-shadow: var(--kid-shadow);
+}
+
+.kid-date-card {
+  min-width: 146px;
+  padding: 12px 16px;
+  text-align: right;
+  background: #e9fbff;
+  transform: rotate(1.5deg);
+}
+
+.kid-date-card span,
+.kid-date-card strong {
+  display: block;
+}
+
+.kid-date-card span {
+  color: var(--kid-muted);
+  font-size: 13px;
+}
+
+.kid-date-card strong {
+  font-size: 24px;
+}
+
+/* 步骤导航 */
+.kid-stepper {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.kid-step {
+  min-height: 54px;
+  color: var(--kid-ink);
+  background: white;
+  border: 3px solid var(--kid-line);
+  border-radius: 999px;
+  box-shadow: 0 5px 0 rgba(48, 48, 79, 0.18);
+  font-weight: 900;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
+}
+
+.kid-step:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.kid-step span {
+  display: inline-grid;
+  width: 27px;
+  height: 27px;
+  margin-right: 6px;
+  place-items: center;
+  color: white;
+  background: var(--kid-lavender);
+  border: 2px solid var(--kid-line);
+  border-radius: 50%;
+}
+
+.kid-step.active {
+  background: var(--kid-banana);
+  box-shadow: 0 7px 0 rgba(48, 48, 79, 0.24);
+}
+
+/* 视图切换 */
+.kid-view {
+  display: none;
+}
+
+.kid-view.active {
+  display: block;
+  animation: kid-pop-in 0.22s ease both;
+}
+
+@keyframes kid-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 首页 hero */
+.kid-hero-panel {
+  position: relative;
+  overflow: hidden;
+  padding: 32px;
+  background:
+    radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.8) 0 42px, transparent 44px),
+    linear-gradient(135deg, #fffdf4, #e8fbff 58%, #fff0f7);
+}
+
+.kid-hero-main {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 18px;
+  min-height: 230px;
+  align-items: center;
+}
+
+.kid-hero-copy h2 {
+  max-width: 560px;
+  font-size: 48px;
+  line-height: 1.05;
+}
+
+.kid-hero-copy p {
+  max-width: 560px;
+  margin-top: 0;
+  color: var(--kid-muted);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.7;
+}
+
+.kid-study-visual {
+  position: relative;
+  min-height: 250px;
+}
+
+.kid-book-shape {
+  position: absolute;
+  right: 26px;
+  top: 34px;
+  width: 185px;
+  height: 212px;
+  display: grid;
+  place-items: center;
+  color: var(--kid-ink);
+  background: var(--kid-banana);
+  border: 4px solid var(--kid-ink);
+  border-radius: 22px 30px 26px 20px;
+  transform: rotate(-7deg);
+  box-shadow: 14px 14px 0 rgba(48, 48, 79, 0.18);
+  animation: kid-floaty 3.6s ease-in-out infinite;
+}
+
+.kid-book-shape::before,
+.kid-book-shape::after {
+  content: '';
+  position: absolute;
+  top: 70px;
+  width: 14px;
+  height: 14px;
+  background: var(--kid-ink);
+  border-radius: 50%;
+}
+
+.kid-book-shape::before {
+  left: 58px;
+}
+
+.kid-book-shape::after {
+  right: 58px;
+}
+
+.kid-book-shape span {
+  margin-top: 20px;
+  font-size: 58px;
+  font-weight: 900;
+}
+
+.kid-orbit {
+  position: absolute;
+  border: 3px dashed rgba(48, 48, 79, 0.22);
+  border-radius: 999px;
+}
+
+.kid-orbit-one {
+  inset: 24px 8px 34px 20px;
+  transform: rotate(18deg);
+}
+
+.kid-orbit-two {
+  inset: 66px 28px 68px 8px;
+  transform: rotate(-22deg);
+}
+
+@keyframes kid-floaty {
+  0%, 100% {
+    transform: translateY(0) rotate(-7deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(-4deg);
+  }
+}
+
+/* 负载日标签 */
+.kid-load-tag {
+  width: fit-content;
+  max-width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: center;
+  margin: 14px 0 18px;
+  padding: 9px 13px;
+  color: var(--kid-ink);
+  background: #fff7db;
+  border: 3px solid var(--kid-line);
+  border-radius: 999px;
+  box-shadow: 0 6px 0 rgba(48, 48, 79, 0.14);
+}
+
+.kid-load-tag strong {
+  padding: 5px 10px;
+  color: white;
+  background: var(--kid-lavender);
+  border: 2px solid var(--kid-line);
+  border-radius: 999px;
+  font-size: 14px;
+}
+
+.kid-load-tag span {
+  color: var(--kid-muted);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.kid-load-tag.light strong {
+  background: var(--kid-mint);
+}
+
+.kid-load-tag.pressure strong {
+  background: var(--kid-pink);
+}
+
+/* 任务词区 */
+.kid-mission-section {
+  position: relative;
+  z-index: 2;
+  margin-top: 18px;
+  padding-top: 22px;
+  border-top: 3px dashed rgba(48, 48, 79, 0.28);
+}
+
+.kid-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.kid-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.kid-counts span,
+.kid-appearances span,
+.kid-pill {
+  padding: 7px 12px;
+  color: var(--kid-ink);
+  background: #e7fff3;
+  border: 2px solid var(--kid-line);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.kid-mission-lane {
+  display: grid;
+  gap: 12px;
+}
+
+.kid-mission-lane + .kid-mission-lane {
+  margin-top: 20px;
+}
+
+.kid-lane-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 2px dashed rgba(48, 48, 79, 0.35);
+  border-radius: 18px;
+}
+
+.kid-lane-title strong {
+  display: block;
+  font-size: 16px;
+}
+
+.kid-lane-title span {
+  display: block;
+  color: var(--kid-muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.kid-word-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+.kid-word-grid.first-pool,
+.kid-word-grid.review-pool {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.kid-mission-word,
+.kid-queue-item {
+  padding: 15px;
+  background: white;
+  border: 3px solid var(--kid-line);
+  border-radius: 20px;
+  box-shadow: 0 6px 0 rgba(48, 48, 79, 0.14);
+}
+
+.kid-mission-word {
+  position: relative;
+  overflow: hidden;
+}
+
+.kid-mission-word::after {
+  position: absolute;
+  right: -8px;
+  top: -8px;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 3px solid var(--kid-line);
+  border-radius: 50%;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.kid-mission-word.new::after {
+  content: 'N';
+  background: var(--kid-mint);
+}
+
+.kid-mission-word.mistake::after {
+  content: '!';
+  background: var(--kid-pink);
+}
+
+.kid-mission-word strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 24px;
+}
+
+.kid-mission-word span {
+  display: block;
+  color: var(--kid-muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.kid-mission-word.mistake {
+  background: #fff0f7;
+}
+
+.kid-mission-word.new {
+  background: #effff6;
+}
+
+/* 单词卡布局 */
+.kid-card-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 18px;
+  align-items: start;
+}
+
+.kid-queue-panel,
+.kid-word-card,
+.kid-reading-panel,
+.kid-dictation-panel,
+.kid-done-panel {
+  padding: 22px;
+}
+
+.kid-queue-panel {
+  order: 2;
+  background: #e9f6ff;
+}
+
+.kid-queue-list {
+  display: grid;
+  gap: 10px;
+}
+
+.kid-queue-item {
+  width: 100%;
+  text-align: left;
+}
+
+.kid-queue-item.active {
+  background: var(--kid-banana);
+  transform: translateX(-4px);
+}
+
+.kid-queue-item strong {
+  display: block;
+}
+
+.kid-queue-item span {
+  display: block;
+  color: var(--kid-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.kid-queue-item.done strong::after {
+  content: ' 读完啦';
+  color: var(--kid-mint-dark);
+  font-size: 12px;
+}
+
+.kid-word-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  order: 1;
+  background:
+    radial-gradient(circle at 94% 12%, rgba(255, 227, 110, 0.6) 0 56px, transparent 58px),
+    #fffdf4;
+}
+
+.kid-card-top,
+.kid-dictation-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.kid-card-top span:first-child {
+  color: var(--kid-muted);
+  font-weight: 900;
+}
+
+.kid-phonetic {
+  margin: 16px 0 2px;
+  color: #2d79b5;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.kid-word-card h2 {
+  margin: 0;
+  font-size: clamp(42px, 6vw, 76px);
+  line-height: 1.05;
+  text-shadow: 4px 4px 0 #dff7ff;
+}
+
+.kid-meaning {
+  margin: 16px 0 20px;
+  color: var(--kid-mint-dark);
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.kid-example-box {
+  padding: 18px;
+  background: #fff2bd;
+  border: 3px solid var(--kid-line);
+  border-radius: 22px;
+  box-shadow: inset 0 -6px 0 rgba(48, 48, 79, 0.08);
+}
+
+.kid-example-box span {
+  color: var(--kid-pink);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.kid-example-box p {
+  margin: 6px 0 0;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.kid-card-controls {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+  padding: 16px;
+  background: rgba(233, 246, 255, 0.64);
+  border: 3px dashed rgba(48, 48, 79, 0.3);
+  border-radius: 22px;
+}
+
+.kid-learning-actions {
+  display: grid;
+  grid-template-columns: minmax(132px, 0.8fr) minmax(160px, 1fr) minmax(132px, 0.8fr);
+  gap: 18px;
+}
+
+.kid-learning-actions button {
+  width: 100%;
+}
+
+.kid-card-navigation {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) 1fr minmax(120px, auto);
+  align-items: center;
+  gap: 24px;
+  padding-top: 20px;
+  border-top: 2px dashed rgba(48, 48, 79, 0.24);
+}
+
+.kid-card-navigation > span {
+  color: var(--kid-muted);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+
+/* 桌面端：左右栏各自限制在可视区内。学习队列过长时只滚动右栏，
+ * 不再把左侧单词卡拉长，从而保持单词、例句和操作按钮在同一屏内。 */
+@media (min-width: 861px) {
+  .kid-card-layout {
+    --kid-card-pane-height: min(620px, calc(100dvh - 220px));
+  }
+
+  .kid-queue-panel,
+  .kid-word-card {
+    height: var(--kid-card-pane-height);
+    max-height: var(--kid-card-pane-height);
+  }
+
+  .kid-queue-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .kid-queue-list {
+    min-height: 0;
+    overflow-y: auto;
+    padding: 2px 5px 4px 0;
+    scrollbar-gutter: stable;
+  }
+
+  .kid-word-card {
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+}
+
+.kid-hint {
+  margin: 0;
+  color: var(--kid-muted);
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+/* 按钮（限定在 .kid-app 内，避免覆盖家长端） */
+.kid-app .primary-btn,
+.kid-app .secondary-btn,
+.kid-app .sound-btn {
+  min-height: 46px;
+  padding: 0 18px;
+  border: 3px solid var(--kid-line);
+  border-radius: 999px;
+  box-shadow: 0 6px 0 rgba(48, 48, 79, 0.2);
+  font-weight: 900;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.kid-app .primary-btn:hover:not(:disabled),
+.kid-app .secondary-btn:hover:not(:disabled),
+.kid-app .sound-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 0 rgba(48, 48, 79, 0.2);
+}
+
+.kid-app .primary-btn:active:not(:disabled),
+.kid-app .secondary-btn:active:not(:disabled),
+.kid-app .sound-btn:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 3px 0 rgba(48, 48, 79, 0.22);
+}
+
+.kid-app .primary-btn {
+  color: white;
+  background: var(--kid-pink);
+}
+
+.kid-app .secondary-btn {
+  color: var(--kid-ink);
+  background: white;
+}
+
+.kid-app .sound-btn {
+  min-width: 132px;
+  color: var(--kid-ink);
+  background: var(--kid-banana);
+}
+
+/* 阅读 */
+.kid-reading-panel,
+.kid-dictation-panel,
+.kid-done-panel {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.kid-reading-panel {
+  background: #e9f6ff;
+}
+
+.kid-scene-note {
+  color: var(--kid-muted);
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.kid-story {
+  padding: 24px;
+  margin: 18px 0;
+  background: white;
+  border: 3px solid var(--kid-line);
+  border-radius: 24px;
+  box-shadow: inset 0 -7px 0 rgba(118, 199, 255, 0.2);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.9;
+}
+
+.kid-story mark {
+  padding: 2px 6px;
+  color: var(--kid-ink);
+  background: var(--kid-banana);
+  border: 2px solid var(--kid-line);
+  border-radius: 10px;
+  font-weight: 900;
+}
+
+.kid-appearances {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.kid-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  color: var(--kid-ink);
+  background: #fff7db;
+  border: 2px solid var(--kid-line);
+  border-radius: 999px;
+  font-weight: 900;
+  margin: 0;
+}
+
+.kid-reading-finish {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  margin-top: 22px;
+}
+
+.kid-timer-ready { background: #e7fff3; }
+
+.kid-reading-generating {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 22px;
+  background: #fff7db;
+  border: 3px dashed var(--kid-line);
+  border-radius: 22px;
+}
+.kid-reading-generating p { margin: 5px 0 0; color: var(--kid-muted); }
+.kid-loading-dot {
+  width: 22px;
+  height: 22px;
+  border: 4px solid rgba(48, 48, 79, 0.18);
+  border-top-color: var(--kid-pink);
+  border-radius: 50%;
+  animation: kid-spin .8s linear infinite;
+}
+@keyframes kid-spin { to { transform: rotate(360deg); } }
+
+/* 默写 */
+.kid-dictation-panel {
+  background: #fff0f7;
+}
+
+.kid-dictation-list {
+  display: grid;
+  gap: 12px;
+}
+
+.kid-dictation-row {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 15px;
+  background: white;
+  border: 3px solid var(--kid-line);
+  border-radius: 20px;
+  box-shadow: 0 5px 0 rgba(48, 48, 79, 0.12);
+}
+
+.kid-dictation-row input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 3px solid var(--kid-line);
+  border-radius: 999px;
+  background: #fffdf4;
+  font-weight: 900;
+}
+
+.kid-dictation-row .prompt strong,
+.kid-dictation-row .prompt span {
+  display: block;
+}
+
+.kid-dictation-row .prompt strong {
+  font-size: 18px;
+}
+
+.kid-dictation-row .prompt span {
+  color: var(--kid-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.kid-dictation-row.correction {
+  background: #edfff4;
+}
+
+.kid-correction-input-shell {
+  position: relative;
+}
+
+.kid-ghost-spelling {
+  position: absolute;
+  left: 17px;
+  top: 50%;
+  z-index: 0;
+  color: #0b7a44;
+  font-size: 20px;
+  font-weight: 900;
+  opacity: 0.34;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.kid-dictation-row.correction input {
+  position: relative;
+  z-index: 1;
+  border-color: #116b3f;
+  background: rgba(251, 255, 253, 0.74);
+}
+
+.kid-dictation-row.correction input::placeholder {
+  color: #14864e;
+  font-weight: 900;
+  opacity: 1;
+}
+
+.kid-dictation-row.correct {
+  background: #e7fff3;
+}
+
+.kid-dictation-row.wrong {
+  background: #fff0e8;
+}
+
+.kid-dictation-row.review {
+  background: #f0fff7;
+}
+
+.kid-review-answer {
+  min-height: 44px;
+  padding: 8px 14px;
+  background: #fffdf4;
+  border: 3px solid #168454;
+  border-radius: 18px;
+}
+
+.kid-review-answer span,
+.kid-review-answer strong {
+  display: block;
+}
+
+.kid-review-answer span {
+  color: var(--kid-mint-dark);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.kid-review-answer strong {
+  margin-top: 2px;
+  font-size: 20px;
+}
+
+.kid-review-note {
+  flex: 1 1 240px;
+  margin: 0;
+  color: var(--kid-mint-dark);
+  font-weight: 900;
+}
+
+.kid-result-label {
+  min-width: 72px;
+  font-weight: 900;
+}
+
+.kid-bonus-reward {
+  width: 96px;
+  max-width: 100%;
+  display: block;
+  filter: drop-shadow(0 5px 0 rgba(48, 48, 79, 0.16));
+  animation: kid-bonus-pop 0.42s ease both;
+}
+
+.kid-review-bonus {
+  width: 46px;
+  margin-top: 5px;
+}
+
+@keyframes kid-bonus-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) rotate(-10deg);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.08) rotate(4deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* 完成页 */
+.kid-done-panel {
+  text-align: center;
+  background:
+    radial-gradient(circle at 18% 22%, rgba(255, 227, 110, 0.45) 0 58px, transparent 60px),
+    #effff6;
+}
+
+.kid-badge-mark {
+  width: 78px;
+  height: 78px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 14px;
+  color: white;
+  background: var(--kid-mint);
+  border: 4px solid var(--kid-line);
+  border-radius: 50%;
+  box-shadow: 0 7px 0 rgba(48, 48, 79, 0.18);
+  font-size: 44px;
+  font-weight: 900;
+}
+
+.kid-result-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 24px 0;
+}
+
+.kid-result-grid div,
+.kid-tomorrow-box,
+.kid-checkin-box {
+  padding: 16px;
+  background: white;
+  border: 3px solid var(--kid-line);
+  border-radius: 22px;
+  box-shadow: 0 6px 0 rgba(48, 48, 79, 0.12);
+}
+
+.kid-result-grid span,
+.kid-result-grid strong {
+  display: block;
+}
+
+.kid-result-grid span {
+  color: var(--kid-muted);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.kid-result-grid strong {
+  font-size: 38px;
+}
+
+.kid-tomorrow-box {
+  margin-bottom: 18px;
+  text-align: left;
+}
+
+.kid-tomorrow-box div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.kid-tomorrow-box span {
+  padding: 8px 12px;
+  background: #e9f6ff;
+  border: 2px solid var(--kid-line);
+  border-radius: 999px;
+  font-weight: 900;
+}
+
+.kid-checkin-box {
+  margin-bottom: 18px;
+  text-align: left;
+  background: #fff7db;
+}
+
+.kid-checkin-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.kid-checkin-head p {
+  margin: 0;
+  color: var(--kid-muted);
+  font-weight: 900;
+}
+
+.kid-checkin-head > span {
+  padding: 7px 12px;
+  background: var(--kid-banana);
+  border: 2px solid var(--kid-line);
+  border-radius: 999px;
+  font-weight: 900;
+}
+
+.kid-checkin-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 7px;
+}
+
+.kid-checkin-day {
+  min-height: 34px;
+  display: grid;
+  place-items: center;
+  color: var(--kid-muted);
+  background: white;
+  border: 2px solid rgba(48, 48, 79, 0.35);
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.kid-checkin-day.checked {
+  color: white;
+  background: var(--kid-mint);
+  border-color: var(--kid-line);
+  box-shadow: 0 4px 0 rgba(48, 48, 79, 0.14);
+}
+
+.kid-checkin-day.today {
+  outline: 3px solid var(--kid-pink);
+  outline-offset: 2px;
+}
+
+/* bonus 弹窗 */
+.kid-bonus-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(48, 48, 79, 0.28);
+}
+
+.kid-bonus-modal {
+  width: min(360px, 100%);
+  padding: 24px;
+  text-align: center;
+  background: #fffdf4;
+  border: 4px solid var(--kid-line);
+  border-radius: 28px;
+  box-shadow: 0 12px 0 rgba(48, 48, 79, 0.2), var(--kid-soft-shadow);
+  animation: kid-bonus-pop 0.42s ease both;
+}
+
+.kid-bonus-modal img {
+  width: 128px;
+  display: block;
+  margin: 0 auto 10px;
+}
+
+.kid-bonus-modal p:not(.small-label) {
+  margin: 0;
+  color: var(--kid-muted);
+  font-weight: 900;
+  line-height: 1.6;
+}
+
+/* toast（学生端自带，避免依赖家长端） */
+.kid-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 40;
+  min-width: 220px;
+  padding: 13px 18px;
+  color: white;
+  background: var(--kid-ink);
+  border: 3px solid white;
+  border-radius: 999px;
+  box-shadow: var(--kid-soft-shadow);
+  text-align: center;
+  transform: translate(-50%, 120px);
+  transition: transform 0.22s ease;
+}
+
+.kid-toast.show {
+  transform: translate(-50%, 0);
+}
+
+.kid-empty {
+  text-align: center;
+  padding: 60px 24px;
+  background: var(--kid-panel);
+  border: 3px dashed var(--kid-line);
+  border-radius: var(--kid-radius);
+  color: var(--kid-muted);
+  font-weight: 900;
+}
+
+.kid-empty h2 {
+  color: var(--kid-ink);
+}
+
+/* 空状态/加载 */
+.kid-note {
+  text-align: center;
+  padding: 40px;
+  color: var(--kid-muted);
+  font-weight: 900;
+}
+
+.kid-note.error {
+  color: var(--kid-red);
+}
+
+/* 响应式 */
+@media (max-width: 860px) {
+  .kid-container {
+    padding: 18px;
+  }
+
+  .kid-topbar,
+  .kid-panel-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .kid-date-card {
+    text-align: left;
+  }
+
+  .kid-stepper {
+    grid-template-columns: 1fr;
+  }
+
+  .kid-card-layout,
+  .kid-hero-main {
+    grid-template-columns: 1fr;
+  }
+
+  .kid-study-visual {
+    display: none;
+  }
+
+  .kid-hero-copy h2 {
+    font-size: 36px;
+  }
+
+  .kid-word-grid,
+  .kid-word-grid.first-pool,
+  .kid-word-grid.review-pool,
+  .kid-result-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kid-queue-panel {
+    order: 1;
+  }
+
+  .kid-word-card {
+    order: 2;
+    min-height: auto;
+  }
+
+  .kid-learning-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .kid-card-navigation {
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .kid-card-navigation > span {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .kid-dictation-row {
+    grid-template-columns: 1fr;
+  }
+}

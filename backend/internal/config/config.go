@@ -22,11 +22,13 @@ func splitCSV(v string) []string {
 
 // Config 是应用运行配置，对应 data/config.yaml。
 type Config struct {
-	Server      ServerConfig `yaml:"server"`
-	DataDir     string       `yaml:"dataDir"`
-	Database    DBConfig     `yaml:"database"`
-	OCR         OCRConfig    `yaml:"ocr"`
-	OpenBrowser bool         `yaml:"openBrowser"`
+	Server        ServerConfig        `yaml:"server"`
+	DataDir       string              `yaml:"dataDir"`
+	Database      DBConfig            `yaml:"database"`
+	OCR           OCRConfig           `yaml:"ocr"`
+	LLM           LLMConfig           `yaml:"llm"`
+	Pronunciation PronunciationConfig `yaml:"pronunciation"`
+	OpenBrowser   bool                `yaml:"openBrowser"`
 
 	// ConfigFile 是配置文件自身的绝对路径，运行时填充，不写回 yaml。
 	ConfigFile string `yaml:"-"`
@@ -53,6 +55,26 @@ type OCRConfig struct {
 	Endpoint string `yaml:"endpoint"`
 	APIKey   string `yaml:"apiKey"`
 	Model    string `yaml:"model"`
+}
+
+// LLMConfig 文本大模型配置（学生端延伸阅读短文生成）。
+// 默认走 DeepSeek 官方 OpenAI 兼容接口（非推理模型 deepseek-chat，响应快）。
+// APIKey 必须在 data/config.yaml 的 llm.apiKey 中填写。
+type LLMConfig struct {
+	Provider string `yaml:"provider"` // mock / siliconflow；为空按 siliconflow 处理
+	Endpoint string `yaml:"endpoint"`
+	APIKey   string `yaml:"apiKey"`
+	Model    string `yaml:"model"`
+}
+
+// PronunciationConfig 控制单词发音来源、地区与上游保护策略。
+// providers 按优先级依次查询；未来的 TTS provider 也实现同一 PronunciationProvider 接口。
+type PronunciationConfig struct {
+	Locale             string   `yaml:"locale"`
+	Providers          []string `yaml:"providers"`
+	RequestIntervalMS  int      `yaml:"requestIntervalMs"`
+	MaxRetries         int      `yaml:"maxRetries"`
+	NegativeCacheHours int      `yaml:"negativeCacheHours"`
 }
 
 // Default 返回带默认值的配置。
@@ -83,6 +105,20 @@ func Default() Config {
 			// 可在 data/config.yaml 改 model 为其他硅基流动视觉模型。
 			Model:  "Qwen/Qwen3-VL-32B-Instruct",
 			APIKey: "",
+		},
+		LLM: LLMConfig{
+			Provider: "siliconflow",
+			// DeepSeek 官方 OpenAI 兼容接口（非推理模型，响应快）。
+			// APIKey 必须在 data/config.yaml 的 llm.apiKey 中填写。
+			Endpoint: "https://api.deepseek.com",
+			Model:    "deepseek-chat",
+		},
+		Pronunciation: PronunciationConfig{
+			Locale:             "en-GB",
+			Providers:          []string{"free_dictionary", "wiktionary"},
+			RequestIntervalMS:  800,
+			MaxRetries:         3,
+			NegativeCacheHours: 24,
 		},
 		OpenBrowser: true,
 	}
@@ -155,6 +191,59 @@ func applyEnv(cfg *Config) {
 	if v := os.Getenv("NIUNIU_OCR_MODEL"); v != "" {
 		cfg.OCR.Model = v
 	}
+	if v := os.Getenv("NIUNIU_LLM_PROVIDER"); v != "" {
+		cfg.LLM.Provider = v
+	}
+	if v := os.Getenv("NIUNIU_LLM_API_KEY"); v != "" {
+		cfg.LLM.APIKey = v
+	}
+	if v := os.Getenv("NIUNIU_LLM_ENDPOINT"); v != "" {
+		cfg.LLM.Endpoint = v
+	}
+	if v := os.Getenv("NIUNIU_LLM_MODEL"); v != "" {
+		cfg.LLM.Model = v
+	}
+	if v := os.Getenv("NIUNIU_PRONUNCIATION_LOCALE"); v != "" {
+		cfg.Pronunciation.Locale = v
+	}
+	if v := os.Getenv("NIUNIU_PRONUNCIATION_PROVIDERS"); v != "" {
+		cfg.Pronunciation.Providers = splitCSV(v)
+	}
+
+	// LLM 默认走 DeepSeek 官方接口，与 OCR（硅基流动）独立配置。
+	// APIKey 必须在 data/config.yaml 的 llm.apiKey 或环境变量 NIUNIU_LLM_API_KEY 中填写。
+	if cfg.LLM.Provider == "" {
+		cfg.LLM.Provider = "siliconflow"
+	}
+	if cfg.LLM.Endpoint == "" {
+		cfg.LLM.Endpoint = "https://api.deepseek.com"
+	}
+	if cfg.LLM.Model == "" {
+		cfg.LLM.Model = "deepseek-chat"
+	}
+	if cfg.Pronunciation.Locale == "" {
+		cfg.Pronunciation.Locale = "en-GB"
+	}
+	if len(cfg.Pronunciation.Providers) == 0 {
+		cfg.Pronunciation.Providers = []string{"free_dictionary", "wiktionary"}
+	}
+	if cfg.Pronunciation.RequestIntervalMS <= 0 {
+		cfg.Pronunciation.RequestIntervalMS = 800
+	}
+	if cfg.Pronunciation.MaxRetries < 0 {
+		cfg.Pronunciation.MaxRetries = 0
+	}
+	if cfg.Pronunciation.NegativeCacheHours <= 0 {
+		cfg.Pronunciation.NegativeCacheHours = 24
+	}
+}
+
+// LLMProviderName 暴露给 main 选择 provider 类型。
+func (c *Config) LLMProviderName() string {
+	if c.LLM.Provider == "mock" {
+		return "mock"
+	}
+	return "siliconflow"
 }
 
 func (c *Config) validate() error {

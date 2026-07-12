@@ -138,7 +138,6 @@ func (h *Handler) handleUpdateWord(w http.ResponseWriter, r *http.Request) {
 		MeaningZh: req.MeaningZh,
 		Phonetic:  req.Phonetic,
 		WordType:  req.WordType,
-		Status:    req.Status,
 	})
 	if err != nil {
 		if err == ErrNotFound {
@@ -171,7 +170,7 @@ func (h *Handler) handleListWords(w http.ResponseWriter, r *http.Request) {
 	result, err := h.store.List(r.Context(), ListParams{
 		Type:     r.URL.Query().Get("type"),
 		Status:   r.URL.Query().Get("status"),
-		Q:      r.URL.Query().Get("q"),
+		Q:        r.URL.Query().Get("q"),
 		Page:     page,
 		PageSize: pageSize,
 	})

@@ -334,7 +334,7 @@ func TestHandle_UpdateWord(t *testing.T) {
 	w0 := doRequest(t, handler, "POST", "/api/v1/words", strings.NewReader(`{"text":"apple","meaningZh":"苹果","wordType":"new"}`), "application/json")
 	id := decodeBody(t, w0)["id"].(string)
 
-	payload := `{"meaningZh":"苹果果","phonetic":"/ˈæpl/","wordType":"mistake","status":"reinforce"}`
+	payload := `{"meaningZh":"苹果果","phonetic":"/ˈæpl/","wordType":"mistake"}`
 	w := doRequest(t, handler, "PUT", "/api/v1/words/"+id, strings.NewReader(payload), "application/json")
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", w.Code, w.Body.String())
@@ -348,7 +348,7 @@ func TestHandle_UpdateWord(t *testing.T) {
 func TestHandle_UpdateWord_NotFound(t *testing.T) {
 	h, _ := newTestHandler(t)
 	handler := registerForTest(t, h)
-	w := doRequest(t, handler, "PUT", "/api/v1/words/nope", strings.NewReader(`{"meaningZh":"x","wordType":"new","status":"unlearned"}`), "application/json")
+	w := doRequest(t, handler, "PUT", "/api/v1/words/nope", strings.NewReader(`{"meaningZh":"x","wordType":"new"}`), "application/json")
 	if w.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", w.Code)
 	}
@@ -375,10 +375,9 @@ func TestHandle_DeleteWord_Physical(t *testing.T) {
 func TestHandle_DeleteWord_Logical(t *testing.T) {
 	h, _ := newTestHandler(t)
 	handler := registerForTest(t, h)
-	// 建一个并改为"学习中"
-	w0 := doRequest(t, handler, "POST", "/api/v1/words", strings.NewReader(`{"text":"apple","meaningZh":"苹果","wordType":"new"}`), "application/json")
+	// 逐个录入“需强化词”后会建立学习记录，应走逻辑删除。
+	w0 := doRequest(t, handler, "POST", "/api/v1/words", strings.NewReader(`{"text":"apple","meaningZh":"苹果","wordType":"mistake"}`), "application/json")
 	id := decodeBody(t, w0)["id"].(string)
-	doRequest(t, handler, "PUT", "/api/v1/words/"+id, strings.NewReader(`{"meaningZh":"苹果","phonetic":"","wordType":"new","status":"learning"}`), "application/json")
 
 	w := doRequest(t, handler, "DELETE", "/api/v1/words/"+id, nil, "")
 	if w.Code != http.StatusOK {
@@ -386,7 +385,7 @@ func TestHandle_DeleteWord_Logical(t *testing.T) {
 	}
 	m := decodeBody(t, w)
 	if m["kind"] != "logical" {
-		t.Errorf("学习中应软删, kind = %v", m["kind"])
+		t.Errorf("需强化词应软删, kind = %v", m["kind"])
 	}
 }
 

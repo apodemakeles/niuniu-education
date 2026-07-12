@@ -78,12 +78,14 @@ function onEnter() {
           <input v-model="phonetic" placeholder="/.../" />
         </div>
         <div class="field">
-          <label>类型</label>
+          <label>录入类型</label>
           <select v-model="wordType">
             <option value="new">新词</option>
-            <option value="mistake">易错词</option>
+            <option value="mistake">需强化词（加入复习计划）</option>
           </select>
         </div>
+
+        <p v-if="wordType === 'mistake'" class="note full">保存后会以“需强化”加入复习计划；后续状态由孩子的学习结果自动更新。</p>
 
         <p v-if="error" class="note error full">{{ error }}</p>
 

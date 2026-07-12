@@ -8,8 +8,8 @@ type Word struct {
 	Text           string `json:"text"`
 	MeaningZh      string `json:"meaningZh"`
 	Phonetic       string `json:"phonetic"`
-	WordType       string `json:"wordType"`  // new / mistake
-	Status         string `json:"status"`    // unlearned/learning/reinforce/mastered
+	WordType       string `json:"wordType"` // new / mistake
+	Status         string `json:"status"`   // unlearned/learning/reinforce/mastered
 	FirstLearnedAt string `json:"-"`
 	LastReviewedAt string `json:"-"`
 	ReviewCount    int    `json:"-"`
@@ -31,10 +31,10 @@ const (
 
 // Status 取值
 const (
-	StatusUnlearned  = "unlearned"
-	StatusLearning   = "learning"
-	StatusReinforce  = "reinforce"
-	StatusMastered   = "mastered"
+	StatusUnlearned = "unlearned"
+	StatusLearning  = "learning"
+	StatusReinforce = "reinforce"
+	StatusMastered  = "mastered"
 )
 
 // Source 取值
@@ -44,10 +44,7 @@ const (
 	SourcePhoto  = "photo"
 )
 
-// DefaultStatusForType 按原型 app.js 规则：新词默认未学，易错词默认需强化。
+// DefaultStatusForType 仅用于兼容旧 words.status 列；实际状态由 word_learning 决定。
 func DefaultStatusForType(wordType string) string {
-	if wordType == TypeMistake {
-		return StatusReinforce
-	}
 	return StatusUnlearned
 }

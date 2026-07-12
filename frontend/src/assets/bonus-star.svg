@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="104" height="74" viewBox="0 0 104 74" role="img" aria-labelledby="title desc">
+  <title id="title">Bonus reward</title>
+  <desc id="desc">A cute cartoon bonus star badge.</desc>
+  <path d="M18 46c-8-3-12-10-10-17 2-8 10-12 18-9 3-10 12-16 22-15 10 2 17 10 18 20 11-2 21 4 24 14 2 10-4 20-14 23H25c-2-5-4-10-7-16z" fill="#E9F6FF" stroke="#30304F" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M50 13l8 16 18 3-13 12 3 18-16-9-16 9 3-18-13-12 18-3 8-16z" fill="#FFE36E" stroke="#30304F" stroke-width="4" stroke-linejoin="round"/>
+  <circle cx="45" cy="36" r="3" fill="#30304F"/>
+  <circle cx="56" cy="36" r="3" fill="#30304F"/>
+  <path d="M44 45c4 4 9 4 13 0" fill="none" stroke="#30304F" stroke-width="3" stroke-linecap="round"/>
+  <path d="M12 13l5 4-5 4-5-4 5-4zM85 10l4 3-4 3-4-3 4-3zM93 55l5 4-5 4-5-4 5-4z" fill="#FF7AA8" stroke="#30304F" stroke-width="2" stroke-linejoin="round"/>
+  <text x="52" y="70" text-anchor="middle" font-family="Trebuchet MS, sans-serif" font-size="15" font-weight="900" fill="#30304F">BONUS</text>
+</svg>

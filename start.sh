@@ -24,9 +24,20 @@ log() { printf "\033[36m[start]\033[0m %s\n" "$*"; }
 warn() { printf "\033[33m[start]\033[0m %s\n" "$*" >&2; }
 die() { printf "\033[31m[start]\033[0m %s\n" "$*" >&2; exit 1; }
 
+# Go 的 net/http 在部分环境中同时存在 ALL_PROXY 与 HTTP(S)_PROXY 时可能不采用代理。
+# 将通用代理归一化为 Go 明确支持的 HTTP/HTTPS 代理，再移除冲突项。
+if [[ -n "${ALL_PROXY:-${all_proxy:-}}" ]]; then
+  PROXY_FALLBACK="${ALL_PROXY:-${all_proxy:-}}"
+  export HTTP_PROXY="${HTTP_PROXY:-${http_proxy:-$PROXY_FALLBACK}}"
+  export HTTPS_PROXY="${HTTPS_PROXY:-${https_proxy:-$PROXY_FALLBACK}}"
+  export http_proxy="${http_proxy:-$HTTP_PROXY}"
+  export https_proxy="${https_proxy:-$HTTPS_PROXY}"
+  unset ALL_PROXY all_proxy
+fi
+
 # 若已存在运行记录，提示先停止
 if [[ -f "$PID_FILE" ]] && [[ -s "$PID_FILE" ]]; then
-  die "检测到已有运行实例（$PID_FILE）。请先执行 ./stop.sh，或删除该文件后再启动。"
+  die "检测到已有运行实例（${PID_FILE}）。请先执行 ./stop.sh，或删除该文件后再启动。"
 fi
 
 mkdir -p "$LOG_DIR"
@@ -34,8 +45,13 @@ mkdir -p "$LOG_DIR"
 
 # ---- 1. 构建后端二进制（若缺失）----
 BIN="$ROOT/bin/niuniu-api"
-if [[ ! -x "$BIN" ]] || [[ "$BIN" -ot "$ROOT/backend/cmd/niuniu/main.go" ]] \
-  || [[ "$BIN" -ot "$(ls -t "$ROOT"/backend/internal/**/*.go 2>/dev/null | head -1 || echo /dev/null)" ]]; then
+NEED_BUILD=0
+if [[ ! -x "$BIN" ]]; then
+  NEED_BUILD=1
+elif find "$ROOT/backend" -type f -name '*.go' -newer "$BIN" -print -quit | grep -q .; then
+  NEED_BUILD=1
+fi
+if [[ "$NEED_BUILD" == "1" ]]; then
   log "构建后端..."
   ( cd backend && CGO_ENABLED=0 go build -o "$BIN" ./cmd/niuniu )
 fi
