@@ -76,8 +76,12 @@ func run() error {
 		slog.String("configFile", cfgPath),
 		slog.Int("port", cfg.Server.Port),
 		slog.String("ocrProvider", cfg.OCR.Provider),
+		slog.Bool("debugMode", cfg.Debug.Enabled),
 		slog.String("version", version.Version),
 	)
+	if cfg.Debug.Enabled {
+		logger.Warn("调试模式已开启：延伸阅读可跳过最短停留时间，正式给孩子用前请关闭")
+	}
 
 	// 3. 数据库（含迁移）
 	ctx := context.Background()
@@ -94,16 +98,19 @@ func run() error {
 	}
 	logger.Info("OCR provider 就绪", slog.String("provider", ocrProvider.Name()))
 
-	// 5. 业务模块装配
+	// 5. 文本模型（阅读和例句生成复用同一配置）
+	llmProvider := newLLMProvider(cfg, logger)
+
+	// 5.1 业务模块装配
 	store := wordlibrary.NewStore(db)
-	svc := wordlibrary.NewService(store, ocrProvider, logger)
+	svc := wordlibrary.NewService(store, ocrProvider, llmProvider, logger)
 	wlHandler := wordlibrary.NewHandler(svc, store, db, cfg, logger)
 
-	// 5.1 学生端任务前台：LLM provider + 任务模块
-	llmProvider := newLLMProvider(cfg, logger)
+	// 5.2 学生端任务前台
 	grade := os.Getenv("NIUNIU_STUDENT_GRADE") // 可选：孩子年级提示（如「小学三年级」）
 	practiceStore := studentwordtask.NewStore(db)
 	practiceSvc := studentwordtask.NewService(practiceStore, llmProvider, grade, logger)
+	practiceSvc.SetDebugMode(cfg.Debug.Enabled)
 	practiceHandler := studentwordtask.NewHandler(practiceSvc, practiceStore, db, cfg, logger)
 
 	// 5.2 发音：多来源按配置顺序组合，首次命中后下载到本地，后续端侧只访问本服务。
@@ -112,6 +119,12 @@ func run() error {
 	var pronunciationProviders []pronunciationprovider.Provider
 	for _, name := range cfg.Pronunciation.Providers {
 		switch name {
+		case "cambridge":
+			// 离线真人库：Cambridge 英式录音（音质最好）。CorpusDir 未配置或目录不存在时 Lookup 自然返回未找到。
+			pronunciationProviders = append(pronunciationProviders, pronunciationprovider.NewLocalCorpusProvider("cambridge", filepath.Join(cfg.Pronunciation.CorpusDir, "cambridge")))
+		case "tfd":
+			// 离线真人库：The Free Dictionary 英式录音（覆盖广）。
+			pronunciationProviders = append(pronunciationProviders, pronunciationprovider.NewLocalCorpusProvider("tfd", filepath.Join(cfg.Pronunciation.CorpusDir, "tfd")))
 		case "free_dictionary":
 			pronunciationProviders = append(pronunciationProviders, pronunciationprovider.NewFreeDictionaryProvider(upstreamClient))
 		case "wiktionary":
@@ -127,7 +140,10 @@ func run() error {
 		filepath.Join(absDataDir, "audio", "pronunciations"),
 		time.Duration(cfg.Pronunciation.NegativeCacheHours)*time.Hour)
 	pronunciationHandler := pronunciationmodule.NewHandler(pronunciationSvc, cfg.Pronunciation.Locale)
-	logger.Info("发音 provider 就绪", slog.Any("providers", cfg.Pronunciation.Providers), slog.String("locale", cfg.Pronunciation.Locale))
+	logger.Info("发音 provider 就绪",
+		slog.Any("providers", cfg.Pronunciation.Providers),
+		slog.String("locale", cfg.Pronunciation.Locale),
+		slog.String("corpusDir", cfg.Pronunciation.CorpusDir))
 
 	// 6. HTTP 服务
 	enableTestEP := os.Getenv("NIUNIU_ENABLE_TEST_ENDPOINTS") == "1"

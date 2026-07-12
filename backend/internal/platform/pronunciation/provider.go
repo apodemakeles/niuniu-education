@@ -26,6 +26,9 @@ type Result struct {
 	LicenseName string
 	LicenseURL  string
 	Attribution string
+	// FilePath 为本地离线库音频的绝对路径。非空时 Service 直接拷贝到缓存目录，跳过 HTTP 下载。
+	// 离线 provider（cambridge/tfd）填充；在线 provider（free_dictionary/wiktionary）留空。
+	FilePath string
 }
 
 type Provider interface {

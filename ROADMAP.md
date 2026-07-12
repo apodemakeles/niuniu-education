@@ -11,6 +11,33 @@
 
 ## 发音系统
 
+### P1：接入离线真人发音库（Cambridge + TFD）
+
+状态：`已完成`（2026-07-12）
+
+当前现状（改进前）：
+
+* Composite Provider 只接入 Free Dictionary 和 Wiktionary 在线来源。
+* Free Dictionary 英式录音覆盖率偏低；Wiktionary 需翻墙，国内云服务器部署不可靠。
+* 在线来源均未命中时，前端用浏览器 Web Speech API（en-GB TTS）兜底，音色和清晰度明显弱于真人录音。
+
+已完成的改进：
+
+* 基于 thousandlemons/English-words-pronunciation-mp3-audio-download 的 `ultimate.json` 索引，批量预下载了 Cambridge（9,127 词）和 The Free Dictionary（42,028 词）的英式真人录音，共约 46,000 词、340MB，存放在项目 data 目录之外的独立语料库目录。
+* 新增通用 `LocalCorpusProvider`（`platform/pronunciation/local_corpus.go`），按 `{word}.mp3` 查找本地音频，命中即用、零网络依赖。
+* `provider.Result` 增加 `FilePath` 字段；`Service.resolveFresh` 检测到本地文件时直接拷贝到缓存目录，跳过 HTTP 下载。在线 provider 不填该字段，行为完全不变。
+* Provider 链调整为 `cambridge → tfd → free_dictionary → wiktionary`：Cambridge 音质优先、TFD 覆盖兜底、在线来源作为最终兜底。
+* 语料库根目录通过 `pronunciation.corpusDir`（yaml）或 `NIUNIU_PRONUNCIATION_CORPUS_DIR`（环境变量）配置；未配置时离线 provider 始终返回未找到，自动降级到在线来源。
+* 修复 TFD 无 ID3 头 mp3 的 MIME 嗅探问题（`application/octet-stream` 退回到 `audio/mpeg`）。
+
+完成标准验证：
+
+* 三级回退实测通过：`factory`（Cambridge 有）→ cambridge；`middle`（TFD 有）→ tfd；`woman`（都没有）→ free_dictionary。
+* 命中后音频缓存到 `data/audio/pronunciations/en-GB/`，后续播放纯本地。
+* 离线库放在 data 目录之外，`reset-today.sh` 的清理流程不影响。
+
+相关代码：`backend/internal/platform/pronunciation/local_corpus.go`、`backend/internal/platform/pronunciation/provider.go`、`backend/internal/module/pronunciation/service.go`、`backend/internal/config/config.go`、`backend/cmd/niuniu/main.go`、语料库目录 `$HOME/github/apodemakeles/niuniu-education-pronunciation-corpus/`
+
 ### P1：重构发音缓存身份模型
 
 状态：`待规划`
@@ -62,9 +89,9 @@
 
 当前现状：
 
-* 当前 Composite Provider 只接入 Free Dictionary 和 Wiktionary 真人录音。
-* 真人录音来源缺失时，Web 前端使用浏览器 `en-GB` TTS 兜底。
-* 实测 `keep`、`put away` 未命中真人录音后使用了浏览器男声，清晰度和音色明显弱于 `always`、`hospital` 的 Free Dictionary 真人录音。
+* 离线真人发音库（Cambridge + TFD，约 46,000 词）已作为主力来源接入，命中即用、零网络依赖。
+* 但离线库只覆盖约 46% 的索引词；离线库和 Free Dictionary 在线来源都未命中的词，仍由浏览器 `en-GB` TTS 兜底。
+* 实测 `keep`、`put away` 未命中真人录音后使用了浏览器男声，清晰度和音色明显弱于真人录音。
 * 国内云服务器不能可靠直连 Wiktionary/Wikimedia，正式部署不能把它作为运行时必须可用的在线依赖。
 
 目标方案：
@@ -145,6 +172,32 @@
 相关代码：`backend/internal/module/studentwordtask/service.go`、`frontend/src/stores/practice.ts`、`frontend/src/components/practice/ReadingView.vue`
 
 ## 今日任务完成与打卡
+
+### P1：AI 学习例句生成、批量进度与历史词补全
+
+状态：`已完成`（2026-07-12）
+
+已确认的目标：
+
+* 家长逐个录入且确认保存后，为每个非重复单词生成 3 个适合小学阶段的 AI 英文例句；每句包含目标单词或短语，允许出现多次但不强制。
+* 拍照导入和粘贴导入确认后，对新增词逐个生成例句，并在前端展示实时进度、单词级成功或失败状态。
+* 家长可对任意单条例句重新生成；学生单词卡每次从该词的 3 条例句中随机展示 1 条。
+* 词库增加主动“补全缺失例句”入口，不自动消耗模型调用；家长确认后以带进度的批量任务补全历史单词。
+
+完成标准：
+
+* 单词保存或批量确认时，重复词不触发例句生成；新增词有 3 条可管理的例句记录。
+* 批量生成过程不阻塞页面、可看到当前进度；单条或单词失败不会中断其他词生成。
+* 学生端不再显示系统占位例句，已生成词随机展示其一。
+
+已完成的实现：
+
+* 新增 `word_examples` 独立表和迁移 `006_word_examples.sql`，每词保存 3 条例句，可逐条重新生成。
+* 使用现有 DeepSeek `deepseek-v4-flash` 配置生成例句；后端会校验 JSON、目标词或短语存在、句子不超过 12 个英文词、三句不重复，并在不合格时自动重试。
+* 逐个录入保存后立即展示生成动画与三条例句；拍照/粘贴导入确认后通过 SSE 展示逐词进度，单词失败不影响其余单词。
+* 词库增加“补全缺失例句”入口；学生端每次读取单词卡时随机选取一条已生成例句，缺失时才保留兼容占位。
+
+相关代码：`backend/internal/module/wordlibrary`、`backend/internal/module/studentwordtask`、`frontend/src/components/word`、`frontend/src/components/import`
 
 ### P1：学习任务状态与单词库状态分离，家长页无法反映实际学习进度
 
@@ -271,7 +324,7 @@
 
 ### P2：单词卡因学习队列过长而被拉伸，重点内容超出首屏
 
-状态：`已完成`（2026-07-12）
+状态：`已完成`（2026-07-12；同日按体验反馈调整为页面整体滚动）
 
 当前现状：
 
@@ -280,9 +333,9 @@
 
 已完成的改进：
 
-* 桌面端两栏都限制为视口内高度，学习队列改为独立滚动，不能再拉长左侧卡片。
-* 左侧卡片在极短视口内保持自身滚动，避免页面整体高度因内容撑开。
-* 单词最大字号从 110px 降至 76px，音标从 30px 降至 22px，并收紧释义和控制区间距。
+* 收紧左侧字号与间距（单词最大 76px、音标 22px），并去掉 `justify-content: space-between`，避免栏内被拉开空白。
+* 两栏用 `align-items: start` 顶对齐；不再给左右栏设固定高度或内部滚轮，内容顺延增高，由页面整体滚动。
+* 学习队列随词条数量自然增高，不出现独立滚动条。
 
 相关代码：`frontend/src/assets/kid.css`
 
@@ -342,3 +395,28 @@
 * 新增前端测试，覆盖首次默写提交不会提前解锁完成页，以及订正错误词继续展示的场景；后端测试覆盖分轮订正时已正确词的结果保持不变。
 
 相关代码：`frontend/src/views/PracticeView.vue`、`frontend/src/stores/practice.ts`、`frontend/src/stores/__tests__/practice.test.ts`、`backend/internal/module/studentwordtask/service.go`、`backend/internal/module/studentwordtask/service_test.go`
+
+## 开发与调试
+
+### P2：调试模式跳过延伸阅读最短停留
+
+状态：`已完成`（2026-07-12）
+
+当前现状：
+
+* 延伸阅读默认需停留满 `reading_min_seconds`（通常 120 秒）才能点击「我读完短文了」。
+* 本地联调、家长自测走完整流程时，等待成本过高。
+
+已完成的改进：
+
+* `data/config.yaml` 增加 `debug.enabled`；也可用环境变量 `NIUNIU_DEBUG=true` 覆盖。
+* 开启后，阅读接口立即返回 `canFinish=true` / `debugMode=true`，完成接口跳过最短停留校验。
+* 启动日志会打印调试模式告警；正式给孩子使用前应关闭。
+
+完成标准：
+
+* `debug.enabled: false`（默认）时行为与原先一致。
+* `debug.enabled: true` 时进入阅读页即可完成，无需等满时长。
+* 重启服务后配置生效。
+
+相关代码：`backend/internal/config/config.go`、`backend/cmd/niuniu/main.go`、`backend/internal/module/studentwordtask/service.go`、`frontend/src/components/practice/ReadingView.vue`、`design/docs/architecture.md`

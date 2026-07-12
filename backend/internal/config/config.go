@@ -20,6 +20,15 @@ func splitCSV(v string) []string {
 	return out
 }
 
+func envTruthy(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 // Config 是应用运行配置，对应 data/config.yaml。
 type Config struct {
 	Server        ServerConfig        `yaml:"server"`
@@ -28,10 +37,18 @@ type Config struct {
 	OCR           OCRConfig           `yaml:"ocr"`
 	LLM           LLMConfig           `yaml:"llm"`
 	Pronunciation PronunciationConfig `yaml:"pronunciation"`
+	Debug         DebugConfig         `yaml:"debug"`
 	OpenBrowser   bool                `yaml:"openBrowser"`
 
 	// ConfigFile 是配置文件自身的绝对路径，运行时填充，不写回 yaml。
 	ConfigFile string `yaml:"-"`
+}
+
+// DebugConfig 本地开发/联调开关。正式给孩子用时应保持关闭。
+type DebugConfig struct {
+	// Enabled 开启后放宽部分学生端限制，便于家长/开发者快速走通流程。
+	// 当前效果：延伸阅读不再要求停留满 minSeconds，可立即完成。
+	Enabled bool `yaml:"enabled"`
 }
 
 type ServerConfig struct {
@@ -75,6 +92,10 @@ type PronunciationConfig struct {
 	RequestIntervalMS  int      `yaml:"requestIntervalMs"`
 	MaxRetries         int      `yaml:"maxRetries"`
 	NegativeCacheHours int      `yaml:"negativeCacheHours"`
+	// CorpusDir 为本地离线真人发音库根目录（其下应含 cambridge/、tfd/ 子目录）。
+	// 配置后 providers 中的 cambridge/tfd 会按 {word}.mp3 查找本地音频，命中即用、零网络依赖。
+	// 为空时这两个 provider 始终返回未找到，自动降级到后续在线来源。
+	CorpusDir string `yaml:"corpusDir"`
 }
 
 // Default 返回带默认值的配置。
@@ -115,10 +136,14 @@ func Default() Config {
 		},
 		Pronunciation: PronunciationConfig{
 			Locale:             "en-GB",
-			Providers:          []string{"free_dictionary", "wiktionary"},
+			// 离线真人库优先（命中即用、音质好、零网络），在线来源兜底。
+			Providers:          []string{"cambridge", "tfd", "free_dictionary", "wiktionary"},
 			RequestIntervalMS:  800,
 			MaxRetries:         3,
 			NegativeCacheHours: 24,
+		},
+		Debug: DebugConfig{
+			Enabled: false,
 		},
 		OpenBrowser: true,
 	}
@@ -209,6 +234,12 @@ func applyEnv(cfg *Config) {
 	if v := os.Getenv("NIUNIU_PRONUNCIATION_PROVIDERS"); v != "" {
 		cfg.Pronunciation.Providers = splitCSV(v)
 	}
+	if v := os.Getenv("NIUNIU_PRONUNCIATION_CORPUS_DIR"); v != "" {
+		cfg.Pronunciation.CorpusDir = v
+	}
+	if v := os.Getenv("NIUNIU_DEBUG"); v != "" {
+		cfg.Debug.Enabled = envTruthy(v)
+	}
 
 	// LLM 默认走 DeepSeek 官方接口，与 OCR（硅基流动）独立配置。
 	// APIKey 必须在 data/config.yaml 的 llm.apiKey 或环境变量 NIUNIU_LLM_API_KEY 中填写。
@@ -225,7 +256,7 @@ func applyEnv(cfg *Config) {
 		cfg.Pronunciation.Locale = "en-GB"
 	}
 	if len(cfg.Pronunciation.Providers) == 0 {
-		cfg.Pronunciation.Providers = []string{"free_dictionary", "wiktionary"}
+		cfg.Pronunciation.Providers = []string{"cambridge", "tfd", "free_dictionary", "wiktionary"}
 	}
 	if cfg.Pronunciation.RequestIntervalMS <= 0 {
 		cfg.Pronunciation.RequestIntervalMS = 800

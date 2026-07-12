@@ -96,27 +96,59 @@ func (s *Service) resolveFresh(ctx context.Context, wordID, locale string) (Reco
 	if err != nil {
 		return Record{}, err
 	}
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, result.AudioURL, nil)
+
+	// 取音频字节：离线 provider 命中本地文件时直接读取，跳过 HTTP 下载；
+	// 在线 provider 通过 AudioURL 下载。
+	var data []byte
+	var sourceForHash string
+	if result.FilePath != "" {
+		data, err = os.ReadFile(result.FilePath)
+		if err != nil {
+			return Record{}, err
+		}
+		sourceForHash = result.FilePath
+	} else {
+		data, sourceForHash, err = s.downloadAudio(ctx, result.AudioURL, result.Provider)
+		if err != nil {
+			return Record{}, err
+		}
+	}
+	return s.persistAudio(ctx, data, w, wordID, locale, result, sourceForHash)
+}
+
+// downloadAudio 通过 HTTP 下载在线 provider 的音频，返回音频字节和用于哈希的来源标识（AudioURL）。
+func (s *Service) downloadAudio(ctx context.Context, audioURL, providerName string) ([]byte, string, error) {
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, audioURL, nil)
 	req.Header.Set("User-Agent", "niuniu-education/1.0 (educational pronunciation cache)")
 	resp, err := s.downloader.Do(req)
 	if err != nil {
-		return Record{}, err
+		return nil, "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return Record{}, &provider.UpstreamError{Provider: result.Provider, StatusCode: resp.StatusCode, RetryAfter: retryAfter(resp.Header.Get("Retry-After"))}
+		return nil, "", &provider.UpstreamError{Provider: providerName, StatusCode: resp.StatusCode, RetryAfter: retryAfter(resp.Header.Get("Retry-After"))}
 	}
 	limited := io.LimitReader(resp.Body, 5<<20+1)
 	data, err := io.ReadAll(limited)
 	if err != nil {
-		return Record{}, err
+		return nil, "", err
 	}
+	return data, audioURL, nil
+}
+
+// persistAudio 校验音频字节、推断 MIME、落盘并写入缓存记录。
+// sourceForHash 用于计算文件名哈希，保证来源不同的音频文件名不冲突。
+// 在线路径传 AudioURL；离线路径传 FilePath。
+func (s *Service) persistAudio(ctx context.Context, data []byte, w wordlibrary.Word, wordID, locale string, result provider.Result, sourceForHash string) (Record, error) {
 	if len(data) < 100 || len(data) > 5<<20 {
 		return Record{}, fmt.Errorf("发音音频大小异常: %d", len(data))
 	}
-	mime := strings.Split(resp.Header.Get("Content-Type"), ";")[0]
-	if mime == "" {
-		mime = http.DetectContentType(data)
+	// 离线 provider 没有响应头，统一用内容嗅探推断 MIME。
+	// 部分 mp3（如 TFD 的录音）无 ID3 头，内容嗅探会得到 application/octet-stream；
+	// 此时退回到来源扩展名兜底，避免 MIME 记录不准确。
+	mime := http.DetectContentType(data)
+	if mime == "application/octet-stream" && strings.HasSuffix(sourceForHash, ".mp3") {
+		mime = "audio/mpeg"
 	}
 	ext := ".mp3"
 	if strings.Contains(mime, "wav") || strings.Contains(mime, "wave") {
@@ -124,7 +156,7 @@ func (s *Service) resolveFresh(ctx context.Context, wordID, locale string) (Reco
 	} else if strings.Contains(mime, "ogg") {
 		ext = ".ogg"
 	}
-	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.ToLower(w.Text)+"|"+locale+"|"+result.Provider+"|"+result.AudioURL)))[:24]
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.ToLower(w.Text)+"|"+locale+"|"+result.Provider+"|"+sourceForHash)))[:24]
 	dir := filepath.Join(s.root, locale)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return Record{}, err
