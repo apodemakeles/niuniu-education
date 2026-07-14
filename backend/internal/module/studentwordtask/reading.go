@@ -283,6 +283,11 @@ func ValidatePassage(text string, covered []CandidateWord) string {
 
 // HighlightText 把覆盖词在正文中用 <mark> 包裹，返回 HTML 与每个词出现次数。
 // 大小写不敏感匹配；保留原文大小写。
+//
+// 安全（防存储型 XSS）：对整段正文逐段做 HTML 转义，仅在命中覆盖词的位置插入
+// <mark> 标签。早期实现用 ReplaceAllStringFunc 只转义了「命中的片段」，
+// 命中词之间的正文原样透传，导致 LLM 生成内容中的 < > & 等字符会作为 HTML 执行。
+// 现改为按命中位置分段拼接，确保所有未命中片段也被转义。
 func HighlightText(text string, covered []CandidateWord) (htmlText string, counts map[string]int) {
 	counts = map[string]int{}
 	if len(covered) == 0 {
@@ -306,21 +311,37 @@ func HighlightText(text string, covered []CandidateWord) (htmlText string, count
 		return htmlEscapeForMark(text), counts
 	}
 
-	htmlText = re.ReplaceAllStringFunc(text, func(match string) string {
-		// 找到 match 对应的原始 word id（小写比较）
+	matches := re.FindAllStringIndex(text, -1)
+	if len(matches) == 0 {
+		return htmlEscapeForMark(text), counts
+	}
+
+	// 逐段拼接：未命中片段做 HTML 转义，命中覆盖词插入 <mark> 标签（内容同样转义）。
+	var b strings.Builder
+	last := 0
+	for _, m := range matches {
+		start, end := m[0], m[1]
+		b.WriteString(htmlEscapeForMark(text[last:start])) // 转义命中前的未匹配片段
+		match := text[start:end]
+		marked := false
 		for _, c := range sorted {
 			if equalFoldASCII(match, c.Word.Text) {
 				counts[c.Word.ID]++
-				return "<mark>" + htmlEscapeForMark(match) + "</mark>"
+				b.WriteString("<mark>")
+				b.WriteString(htmlEscapeForMark(match))
+				b.WriteString("</mark>")
+				marked = true
+				break
 			}
 		}
-		return htmlEscapeForMark(match)
-	})
-	// 对 <mark> 标签本身被转义的情况做还原（ReplaceAllStringFunc 不转义，但我们对 match 做了 escape，
-	// 标签是我们自己拼的，需保证不被二次转义）
-	htmlText = strings.ReplaceAll(htmlText, "&lt;mark&gt;", "<mark>")
-	htmlText = strings.ReplaceAll(htmlText, "&lt;/mark&gt;", "</mark>")
-	return htmlText, counts
+		if !marked {
+			// 兜底：正则命中但未匹配到覆盖词（理论上不会发生），仅转义
+			b.WriteString(htmlEscapeForMark(match))
+		}
+		last = end
+	}
+	b.WriteString(htmlEscapeForMark(text[last:])) // 转义末尾剩余片段
+	return b.String(), counts
 }
 
 func equalFoldASCII(a, b string) bool {

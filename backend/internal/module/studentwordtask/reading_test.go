@@ -181,6 +181,42 @@ func TestHighlightText_LongWordBeforeShort(t *testing.T) {
 	}
 }
 
+func TestHighlightText_EscapesNonMatchedHTML(t *testing.T) {
+	// XSS 防护：命中词之间的正文片段（含 < > &）必须被 HTML 转义，
+	// 不能原样透传给前端 v-html。
+	text := "apple <script>alert(1)</script> banana"
+	covered := []CandidateWord{
+		{Word: WordInfo{ID: "a", Text: "apple"}},
+		{Word: WordInfo{ID: "b", Text: "banana"}},
+	}
+	htmlText, counts := HighlightText(text, covered)
+	if counts["a"] != 1 || counts["b"] != 1 {
+		t.Fatalf("计数错误：apple=%d banana=%d", counts["a"], counts["b"])
+	}
+	if containsStr(htmlText, "<script>") {
+		t.Fatalf("未转义的 <script> 泄漏进 HTML：%s", htmlText)
+	}
+	if !containsStr(htmlText, "&lt;script&gt;") {
+		t.Fatalf("正文应被转义为 &lt;script&gt;，得：%s", htmlText)
+	}
+	if !containsStr(htmlText, "<mark>apple</mark>") || !containsStr(htmlText, "<mark>banana</mark>") {
+		t.Fatalf("命中词仍应被 <mark> 包裹：%s", htmlText)
+	}
+}
+
+func TestHighlightText_EscapesAmpersand(t *testing.T) {
+	// & 必须转义为 &amp;，避免与后续实体产生歧义
+	text := "apple & banana"
+	covered := []CandidateWord{{Word: WordInfo{ID: "a", Text: "apple"}}}
+	htmlText, counts := HighlightText(text, covered)
+	if counts["a"] != 1 {
+		t.Fatalf("apple 计数=%d，期望 1", counts["a"])
+	}
+	if !containsStr(htmlText, "&amp;") {
+		t.Fatalf("& 应被转义为 &amp;，得：%s", htmlText)
+	}
+}
+
 func TestParsePassageJSON(t *testing.T) {
 	raw := `{"title":"My Day","text":"I eat an apple.","sceneHint":"这是一个早晨"}`
 	title, text, scene, err := parsePassageJSON(raw)

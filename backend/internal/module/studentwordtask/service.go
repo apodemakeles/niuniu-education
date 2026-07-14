@@ -598,7 +598,8 @@ func (s *Service) buildReadingResponse(p ReadingPassage) ReadingResponse {
 	resp := ReadingResponse{
 		Date:       p.TaskDate,
 		Title:      p.ReadingTitle,
-		Text:       p.ReadingText,
+		// Text 经前端 v-html 渲染，默认先转义；success 状态会在下方被 HighlightText 覆盖为高亮 HTML。
+		Text:       htmlEscapeForMark(p.ReadingText),
 		RawText:    p.ReadingText,
 		SceneHint:  p.ReadingSceneHint,
 		Status:     p.AIGenerationStatus,
