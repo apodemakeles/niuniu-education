@@ -1,0 +1,69 @@
+# 牛牛教辅系统配置示例
+#
+# 用法：
+#   1. 复制本文件到 data/config.yaml：cp config.example.yaml data/config.yaml
+#   2. 填写下面标 ←必填 的 apiKey 等项
+#   3. 启动后端：make dev-backend 或 ./start.sh
+#
+# 注意：
+#   - data/config.yaml 被 .gitignore 忽略，含密钥不会进版本控制，丢了无法从 git 找回。
+#   - 所有配置项均可用环境变量覆盖（见每项末尾的 NIUNIU_* 标注），环境变量优先级更高。
+#   - 后端首次启动若 data/config.yaml 不存在，会基于代码内默认值自动生成一份（但不含 apiKey）。
+
+# ========== 服务 ==========
+server:
+  host: "127.0.0.1"          # 监听地址（NIUNIU_HOST）
+  port: 8787                 # 监听端口（NIUNIU_PORT）
+  cors:
+    enabled: true
+    allowedOrigins:          # 放行的前端来源（NIUNIU_CORS_ALLOWED_ORIGINS，逗号分隔）
+      - "http://localhost:5173"   # vite dev server
+      - "http://localhost:4173"   # vite preview
+      - "http://localhost:8080"
+
+# ========== 数据目录 ==========
+dataDir: "./data"            # 相对程序工作目录；数据库、图片、导出、音频缓存都在此（NIUNIU_DATA_DIR）
+
+database:
+  journalMode: "WAL"         # SQLite 日志模式
+  busyTimeout: 5000          # 写锁等待毫秒
+
+# ========== OCR（拍照导入单词表）==========
+# 不填 apiKey 时拍照识别会报错；临时不想接外部服务可设 provider: mock 走假数据。
+ocr:
+  provider: "siliconflow"                       # mock / siliconflow（NIUNIU_OCR_PROVIDER）
+  endpoint: "https://api.siliconflow.cn/v1"     # 硅基流动（NIUNIU_OCR_ENDPOINT）
+  model: "Qwen/Qwen3-VL-32B-Instruct"           # 实测对竖版/复杂教材图识别更稳定（NIUNIU_OCR_MODEL）
+  apiKey: ""                                    # ←必填 硅基流动 API Key（NIUNIU_OCR_API_KEY），获取：cloud.siliconflow.cn
+
+# ========== LLM（延伸阅读短文、单词例句生成）==========
+# 不填 apiKey 时短文/例句生成会报错；临时不想接外部服务可设 provider: mock 走假数据。
+llm:
+  provider: "siliconflow"                       # mock / siliconflow（NIUNIU_LLM_PROVIDER）
+  endpoint: "https://api.deepseek.com"          # DeepSeek 官方 OpenAI 兼容接口（NIUNIU_LLM_ENDPOINT）
+  model: "deepseek-chat"                        # 非推理模型，响应快（NIUNIU_LLM_MODEL）
+  apiKey: ""                                    # ←必填 DeepSeek API Key（NIUNIU_LLM_API_KEY），获取：platform.deepseek.com
+
+# ========== 发音 ==========
+pronunciation:
+  locale: "en-GB"                               # 英语地区（NIUNIU_PRONUNCIATION_LOCALE）
+  # Provider 链，按优先级依次查询，命中即用：
+  #   cambridge / tfd      → 离线真人库（需配 corpusDir，命中零网络、音质好）
+  #   free_dictionary       → 在线 Free Dictionary API（免费、无需 key）
+  #   wiktionary            → 在线 Wiktionary（国内不稳定，近乎兜底）
+  providers:                                     # 逗号分隔（NIUNIU_PRONUNCIATION_PROVIDERS）
+    - "cambridge"
+    - "tfd"
+    - "free_dictionary"
+    - "wiktionary"
+  requestIntervalMs: 800     # 在线来源请求间隔，避免限流
+  maxRetries: 3              # 单个 provider 失败重试次数
+  negativeCacheHours: 24     # 查不到的词缓存为「未找到」的小时数，避免反复请求
+  # 离线真人发音库根目录，其下应含 cambridge/、tfd/ 子目录，每个子目录为 {word小写}.mp3。
+  # 为空时 cambridge/tfd 始终未命中，自动降级到在线来源。
+  corpusDir: ""              # ←建议填写（NIUNIU_PRONUNCIATION_CORPUS_DIR），例如 /Users/caozheng/workspace/niuniu-ed-pronuncation
+
+# ========== 调试 ==========
+debug:
+  enabled: false            # 开启后延伸阅读跳过最短停留时长，便于家长自测（NIUNIU_DEBUG=true）。
+                           # 正式给孩子用前必须关闭。
