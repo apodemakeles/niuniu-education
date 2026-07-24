@@ -38,6 +38,8 @@
 
 相关代码：`backend/internal/platform/pronunciation/local_corpus.go`、`backend/internal/platform/pronunciation/provider.go`、`backend/internal/module/pronunciation/service.go`、`backend/internal/config/config.go`、`backend/cmd/niuniu/main.go`、语料库目录 `$HOME/github/apodemakeles/niuniu-education-pronunciation-corpus/`
 
+> 2026-07-23 重建记录：原语料库目录因磁盘故障丢失，已用 `design/scripts/download-pronunciation-corpus.mjs` 从 thousandlemons `ultimate.json` 索引重新下载到 `/Users/caozheng/workspace/niuniu-ed-pronuncation/`。本次重建将 Cambridge 英式录音从原来筛选的约 9,127 词扩展为索引中全部 `dictionary.cambridge.org` + `/uk_pron/` 来源，共 **26,653 词**（243M）；TFD 英式 42,044 词（354M）；合计 **68,697 词、597M、完成率 99.97%**。未获取的 19 个词均为源站死链（Cambridge 17 个 404、TFD 2 个返回无效占位音频），其中 11 个两库都无的词由 Provider 链自动降级到 free_dictionary 在线来源。重建后的 `pronunciation.corpusDir` 应指向 `/Users/caozheng/workspace/niuniu-ed-pronuncation`。
+
 ### P1：重构发音缓存身份模型
 
 状态：`待规划`
@@ -89,8 +91,8 @@
 
 当前现状：
 
-* 离线真人发音库（Cambridge + TFD，约 46,000 词）已作为主力来源接入，命中即用、零网络依赖。
-* 但离线库只覆盖约 46% 的索引词；离线库和 Free Dictionary 在线来源都未命中的词，仍由浏览器 `en-GB` TTS 兜底。
+* 离线真人发音库（Cambridge + TFD，约 68,700 词）已作为主力来源接入，命中即用、零网络依赖。
+* 但离线库只覆盖约 57% 的索引词；离线库和 Free Dictionary 在线来源都未命中的词，仍由浏览器 `en-GB` TTS 兜底。
 * 实测 `keep`、`put away` 未命中真人录音后使用了浏览器男声，清晰度和音色明显弱于真人录音。
 * 国内云服务器不能可靠直连 Wiktionary/Wikimedia，正式部署不能把它作为运行时必须可用的在线依赖。
 
