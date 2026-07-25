@@ -41,7 +41,7 @@ ocr:
 llm:
   provider: "siliconflow"                       # mock / siliconflow（NIUNIU_LLM_PROVIDER）
   endpoint: "https://api.deepseek.com"          # DeepSeek 官方 OpenAI 兼容接口（NIUNIU_LLM_ENDPOINT）
-  model: "deepseek-chat"                        # 非推理模型，响应快（NIUNIU_LLM_MODEL）
+  model: "deepseek-v4-flash"                    # DeepSeek 官方模型名（deepseek-chat 已下线，NIUNIU_LLM_MODEL）
   apiKey: ""                                    # ←必填 DeepSeek API Key（NIUNIU_LLM_API_KEY），获取：platform.deepseek.com
 
 # ========== 发音 ==========

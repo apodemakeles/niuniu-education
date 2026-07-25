@@ -24,7 +24,7 @@ const (
 	readingMinWords = 80
 	readingMaxWords = 140
 	readingAppear   = 2  // 每个覆盖词在正文中至少出现的次数
-	readingMaxRetry = 4  // 首次 + 最多 4 次重试（deepseek-chat 每次约 3s，5 次约 15s）
+	readingMaxRetry = 4  // 首次 + 最多 4 次重试（deepseek-v4-flash 每次约 3s，5 次约 15s）
 )
 
 // SelectCoveredWords 按 PRD 优先级选择覆盖词：新词池→需强化→学习中→已掌握，3~6 个。
