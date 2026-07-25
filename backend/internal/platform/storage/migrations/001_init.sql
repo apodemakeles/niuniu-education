@@ -60,12 +60,5 @@ CREATE TABLE import_images (
 INSERT INTO libraries(id, name) VALUES ('main-library', '默认词库')
     ON CONFLICT(id) DO NOTHING;
 
--- 预置原型 app.js 中的示例单词，方便前端联调首屏有内容
-INSERT INTO words(id, library_id, text, meaning_zh, phonetic, word_type, status) VALUES
-    ('w-1', 'main-library', 'apple',  '苹果',     '/ˈæpl/',    'new',     'unlearned'),
-    ('w-2', 'main-library', 'read',   '阅读',     '/riːd/',    'mistake', 'reinforce'),
-    ('w-3', 'main-library', 'desk',   '书桌',     '/desk/',    'new',     'learning'),
-    ('w-4', 'main-library', 'climb',  '攀爬',     '/klaɪm/',   'mistake', 'reinforce'),
-    ('w-5', 'main-library', 'water',  '水',       '/ˈwɔːtər/', 'new',     'mastered'),
-    ('w-6', 'main-library', 'their',  '他们的',   '/ðer/',     'mistake', 'reinforce')
-ON CONFLICT(id) DO NOTHING;
+-- 不再预置示例单词：新环境首屏为空库，由家长自行录入。
+-- 旧环境的预置词不会被回删，需要手动清理或重建数据库。
