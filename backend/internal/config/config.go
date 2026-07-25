@@ -75,7 +75,7 @@ type OCRConfig struct {
 }
 
 // LLMConfig 文本大模型配置（学生端延伸阅读短文生成）。
-// 默认走 DeepSeek 官方 OpenAI 兼容接口（非推理模型 deepseek-chat，响应快）。
+// 默认走 DeepSeek 官方 OpenAI 兼容接口（deepseek-v4-flash，响应快）。
 // APIKey 必须在 data/config.yaml 的 llm.apiKey 中填写。
 type LLMConfig struct {
 	Provider string `yaml:"provider"` // mock / siliconflow；为空按 siliconflow 处理
@@ -129,10 +129,11 @@ func Default() Config {
 		},
 		LLM: LLMConfig{
 			Provider: "siliconflow",
-			// DeepSeek 官方 OpenAI 兼容接口（非推理模型，响应快）。
+			// DeepSeek 官方 OpenAI 兼容接口。
+			// model 用 deepseek-v4-flash（deepseek-chat 已被官方下线，调用会返回 invalid_request_error）。
 			// APIKey 必须在 data/config.yaml 的 llm.apiKey 中填写。
 			Endpoint: "https://api.deepseek.com",
-			Model:    "deepseek-chat",
+			Model:    "deepseek-v4-flash",
 		},
 		Pronunciation: PronunciationConfig{
 			Locale:             "en-GB",
@@ -250,7 +251,7 @@ func applyEnv(cfg *Config) {
 		cfg.LLM.Endpoint = "https://api.deepseek.com"
 	}
 	if cfg.LLM.Model == "" {
-		cfg.LLM.Model = "deepseek-chat"
+		cfg.LLM.Model = "deepseek-v4-flash"
 	}
 	if cfg.Pronunciation.Locale == "" {
 		cfg.Pronunciation.Locale = "en-GB"

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -78,10 +79,16 @@ func (s *ExampleService) generate(ctx context.Context, text, meaning string, avo
 		user := examplePrompt(text, meaning, avoid, count)
 		raw, err := s.llm.Generate(ctx, exampleSystemPrompt, user)
 		if err != nil {
+			slog.Warn("生成例句：LLM 调用失败", "word", text, "attempt", attempt, "err", err)
 			continue
 		}
 		sentences, err := parseExampleJSON(raw, count)
-		if err != nil || !validExamples(sentences, text, avoid) {
+		if err != nil {
+			slog.Warn("生成例句：解析 LLM 输出失败", "word", text, "attempt", attempt, "err", err)
+			continue
+		}
+		if !validExamples(sentences, text, avoid) {
+			slog.Warn("生成例句：校验未通过（目标词缺失/超长/重复）", "word", text, "attempt", attempt, "sentences", sentences)
 			continue
 		}
 		return sentences, nil

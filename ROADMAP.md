@@ -421,4 +421,22 @@
 * `debug.enabled: true` 时进入阅读页即可完成，无需等满时长。
 * 重启服务后配置生效。
 
+### P1：DeepSeek 默认模型名 deepseek-chat 已被官方下线
+
+状态：`已完成`（2026-07-25）
+
+当前现状（改进前）：
+
+* `config.Default()` 与 `config.example.yaml` 的 LLM 默认模型名为 `deepseek-chat`。
+* DeepSeek 官方已下线 `deepseek-chat`，调用返回 `invalid_request_error: The supported API model names are deepseek-v4-pro or deepseek-v4-flash`。
+* 新部署或未手动改 model 的环境，单词例句生成、延伸阅读短文生成都会 502，且 `examples.go` 的 `continue` 吞掉了上游错误，日志只能看到泛化的「例句生成失败，请稍后重试」，难以定位。
+
+已完成的改进：
+
+* 默认模型名改为 `deepseek-v4-flash`（`config.go` 的 `Default()`、`applyEnv` 兜底、`config.example.yaml`、`reading.go` 注释同步更新）。
+* `examples.go` 的 `generate` 把原先静默 `continue` 改为分类 `slog.Warn`：区分「LLM 调用失败」「解析失败」「校验未通过（目标词缺失/超长/重复）」三种情况，便于排查。
+* 已验证：本地实测 `POST /api/v1/words/{id}/examples/generate` 用 `deepseek-v4-flash` 约 1.5s 返回 3 条合格例句。
+
+相关代码：`backend/internal/config/config.go`、`backend/internal/module/wordlibrary/examples.go`、`backend/internal/module/studentwordtask/reading.go`、`config.example.yaml`
+
 相关代码：`backend/internal/config/config.go`、`backend/cmd/niuniu/main.go`、`backend/internal/module/studentwordtask/service.go`、`frontend/src/components/practice/ReadingView.vue`、`design/docs/architecture.md`
